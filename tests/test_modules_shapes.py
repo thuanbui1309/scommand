@@ -169,14 +169,12 @@ def test_trunk_backward_grad_flows_shd(shd_batch: torch.Tensor) -> None:
 
 
 def test_trunk_param_count_within_band() -> None:
-    """SHD trunk param count diagnostic gate.
+    """SHD baseline param count gate vs paper Table 2 (0.19M).
 
-    Spec §3 reports paper baseline at 0.19M but the modular implementation
-    (with both pw-conv stages in SCR-MLP and dual proj in STASA) yields ~296K.
-    The spec itself notes this discrepancy and defers exact recalibration to
-    Phase 01 Step 10.  This test guards against catastrophic explosion (>500K)
-    or collapse (<100K) while the exact figure is validated against the server.
-    Print the actual value for the server-side CI log.
+    Ref best_config_SHD_former.py uses mlp_ratio=1 (hidden=D); earlier 296K
+    blow-up was from our default expansion=4 not being overridden per-dataset.
+    SHD gets expansion=1 via configs/dataset/shd.yaml; SSC/GSC keep 4.
+    Band ±10% around paper 190K = [170K, 210K].
     """
     model_cls = resolve("model", "spikcommander")
     model = model_cls(
@@ -186,10 +184,11 @@ def test_trunk_param_count_within_band() -> None:
         n_heads=8,
         depth=1,
         window_radius=20,
+        expansion=1.0,   # SHD baseline: mlp_ratio=1
         neuron_cfg={"backend": "torch"},
     )
     n = sum(p.numel() for p in model.parameters())
     print(f"SHD params: {n:,}")
-    assert 100_000 <= n <= 500_000, (
-        f"param count {n:,} outside sanity band [100_000, 500_000]"
+    assert 170_000 <= n <= 210_000, (
+        f"SHD param count {n:,} outside paper band [170_000, 210_000]"
     )

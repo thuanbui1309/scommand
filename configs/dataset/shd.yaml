@@ -15,6 +15,7 @@ model:
   depth: 1
   dim: 128
   n_heads: 8
+  expansion: 1       # SHD baseline uses mlp_ratio=1 (ref best_config_SHD_former.py:40); SSC/GSC keep 4
 
 augmentation:
   eventdrop:
