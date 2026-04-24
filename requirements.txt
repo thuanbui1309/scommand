@@ -14,8 +14,8 @@ tonic>=1.5.0
 mamba-ssm>=2.0.0
 causal-conv1d>=1.2.0
 
-# Metrics / Efficiency
-syops-counter>=0.1.0
+# Metrics / Efficiency (PyPI name is `syops`, repo is `syops-counter`)
+syops>=0.0.5
 
 # Config + Utilities
 pyyaml>=6.0
