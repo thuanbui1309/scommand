@@ -13,7 +13,7 @@ def test_torch_import() -> None:
 def test_cuda_available() -> None:
     import torch
 
-    assert torch.cuda.is_available(), "RTX 4090 expected; CUDA must be available"
+    assert torch.cuda.is_available(), "RTX 5090 (Blackwell sm_120) expected; CUDA must be available"
 
 
 def test_spikingjelly_import() -> None:
@@ -37,6 +37,39 @@ def test_seed_utility() -> None:
     from scommander.utils.seed import set_seed
 
     set_seed(42)
+
+
+def test_seed_determinism_three_rerun() -> None:
+    """Phase 00 gate: identical seed produces bit-identical first-batch loss across 3 reruns."""
+    import torch
+
+    from scommander.utils.seed import set_seed
+
+    def sample_tensor() -> torch.Tensor:
+        set_seed(1337)
+        x = torch.randn(4, 16)
+        w = torch.randn(16, 8)
+        return (x @ w).sum()
+
+    outputs = [sample_tensor().item() for _ in range(3)]
+    assert outputs[0] == outputs[1] == outputs[2], f"seed non-deterministic: {outputs}"
+
+
+def test_base_config_load_omegaconf() -> None:
+    """Phase 00 gate: base.yaml loads via OmegaConf; amp default is false."""
+    from pathlib import Path
+
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).resolve().parents[1]
+    cfg_path = repo_root / "configs" / "base.yaml"
+    assert cfg_path.exists(), f"base.yaml missing at {cfg_path}"
+
+    cfg = OmegaConf.load(cfg_path)
+    amp = OmegaConf.select(cfg, "amp", default=None)
+    if amp is None:
+        amp = OmegaConf.select(cfg, "train.amp", default=None)
+    assert amp is False, f"amp must default to false (locked precision policy); got {amp!r}"
 
 
 def test_json_logger(tmp_path) -> None:
