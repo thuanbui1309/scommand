@@ -15,6 +15,7 @@ from tqdm import tqdm
 import torch.nn.functional as F
 import torch.nn as nn
 from spikingjelly.activation_based import functional
+from spikingjelly.datasets import padded_sequence_mask
 from datetime import datetime
 from uuid import uuid4
 import os
