@@ -122,7 +122,9 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader, DataLoader]:
     os.makedirs(root, exist_ok=True)
     post_bins = int(cfg.dataset.n_bins)       # 140
     n_bins = _SSC_N_RAW // post_bins           # = 5
-    duration = int(cfg.dataset.time_steps)    # ms; 10 -> T=100
+    # Time-bin width in ms (reference: 10 -> T=100). Stored as `bin_width_ms`
+    # in yaml; `time_steps` is the target T count, not a bin width.
+    duration = int(cfg.dataset.bin_width_ms)
     batch_size = int(cfg.training.batch_size)
     aug_enabled = bool(cfg.augmentation.enabled)
 

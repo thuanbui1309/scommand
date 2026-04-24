@@ -136,7 +136,10 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
     raw_neurons = 700
     n_bins = raw_neurons // post_bins         # = 5 bin-width
 
-    duration = int(cfg.dataset.time_steps)   # frame duration ms; 10ms -> T=100
+    # SpikingJelly's `duration` is ms PER FRAME. Our yaml stores the target T in
+    # `time_steps` (=100) and the per-frame width in `bin_width_ms` (=10). The
+    # spikingjelly arg we need is bin_width_ms, NOT time_steps.
+    duration = int(cfg.dataset.bin_width_ms)  # 10ms per frame -> T=1000/10=100
     batch_size = int(cfg.training.batch_size)
     aug_enabled = bool(cfg.augmentation.enabled)
 
