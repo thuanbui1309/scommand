@@ -136,10 +136,10 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
     raw_neurons = 700
     n_bins = raw_neurons // post_bins         # = 5 bin-width
 
-    # SpikingJelly's `duration` is ms PER FRAME. Our yaml stores the target T in
-    # `time_steps` (=100) and the per-frame width in `bin_width_ms` (=10). The
-    # spikingjelly arg we need is bin_width_ms, NOT time_steps.
-    duration = int(cfg.dataset.bin_width_ms)  # 10ms per frame -> T=1000/10=100
+    # SpikingJelly's `duration` is in the event's `t` units (seconds for SHD)
+    # and must be integer → cannot pass 0.01. Use `frames_number` mode with
+    # `split_by='time'` to get exactly T=time_steps equal-time chunks per clip.
+    frames_number = int(cfg.dataset.time_steps)   # 100
     batch_size = int(cfg.training.batch_size)
     aug_enabled = bool(cfg.augmentation.enabled)
 
@@ -160,7 +160,8 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
         n_bins=n_bins,
         train=True,
         data_type="frame",
-        duration=duration,
+        frames_number=frames_number,
+        split_by="time",
         transform=transform,
     )
     test_dataset = BinnedSpikingHeidelbergDigits(
@@ -168,7 +169,8 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
         n_bins=n_bins,
         train=False,
         data_type="frame",
-        duration=duration,
+        frames_number=frames_number,
+        split_by="time",
         transform=None,
     )
 
