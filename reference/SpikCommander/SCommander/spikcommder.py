@@ -5,9 +5,9 @@ from torch.nn.init import xavier_uniform_
 from spikingjelly.activation_based import neuron, layer,surrogate
 import numpy as np
 from spikingjelly.activation_based.neuron import LIFNode,ParametricLIFNode
-from reference.SpikCommander.SCommander.module.conv import Transpose,PointwiseConv1d,DepthwiseConv1d
+from module.conv import Transpose,PointwiseConv1d,DepthwiseConv1d
 from spikingjelly.datasets import padded_sequence_mask
-from reference.SpikCommander.SCommander.module.spikcommander_backbone import Backbone
+from module.spikcommander_backbone import Backbone
 
 class SEE(nn.Module):
     def __init__(self, config, kernel_size=7):

@@ -1,8 +1,8 @@
-from reference.SpikCommander.SCommander.datasets import SHD_dataloaders, SSC_dataloaders, GSC_dataloaders
-from reference.SpikCommander.SCommander.best_config_GSC_former import Config as GSCTConfig
-from reference.SpikCommander.SCommander.best_config_SSC_former import Config as SSCTConfig
-from reference.SpikCommander.SCommander.best_config_SHD_former import Config as SHDTConfig
-from reference.SpikCommander.SCommander.spikcommder import SpikCommander
+from datasets import SHD_dataloaders, SSC_dataloaders, GSC_dataloaders
+from best_config_GSC_former import Config as GSCTConfig
+from best_config_SSC_former import Config as SSCTConfig
+from best_config_SHD_former import Config as SHDTConfig
+from spikcommder import SpikCommander
 import torch
 import utils
 import numpy as np

@@ -17,7 +17,7 @@ from torchaudio.transforms import Spectrogram, MelScale, AmplitudeToDB, Resample
 from torchaudio.datasets.speechcommands import SPEECHCOMMANDS
 from torchaudio.datasets.librispeech import LIBRISPEECH
 from torchvision import transforms
-import reference.SpikCommander.SCommander.augmentations as augmentations
+import augmentations as augmentations
 import os
 import torch.distributed as dist
 import random

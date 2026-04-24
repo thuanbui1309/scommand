@@ -1,8 +1,8 @@
-from reference.SpikCommander.SCommander.datasets import SHD_dataloaders, SSC_dataloaders, GSC_dataloaders
-from reference.SpikCommander.SCommander.best_config_GSC_former import Config as GSCTConfig
-from reference.SpikCommander.SCommander.best_config_SSC_former import Config as SSCTConfig
-from reference.SpikCommander.SCommander.best_config_SHD_former import Config as SHDTConfig
-from reference.SpikCommander.SCommander.spikcommder import SpikCommander
+from datasets import SHD_dataloaders, SSC_dataloaders, GSC_dataloaders
+from best_config_GSC_former import Config as GSCTConfig
+from best_config_SSC_former import Config as SSCTConfig
+from best_config_SHD_former import Config as SHDTConfig
+from spikcommder import SpikCommander
 from spikingjelly.datasets import padded_sequence_mask
 from snn_delays import SnnDelays
 import torch
@@ -23,7 +23,7 @@ from uuid import uuid4
 import os
 import copy
 import matplotlib.pyplot as plt
-from reference.SpikCommander.SCommander.datasets import SpecAugment,SpecAugmenter
+from datasets import SpecAugment,SpecAugmenter
 
 
 eventid = datetime.now().strftime('%Y%m-%d%H-%M%S-') + str(uuid4())
