@@ -8,7 +8,14 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 
 from spikingjelly.datasets.shd import SpikingHeidelbergDigits
-from spikingjelly.datasets.shd import SpikingSpeechCommands
+try:
+    from spikingjelly.datasets.shd import SpikingSpeechCommands
+except ImportError:
+    # Dropped in spikingjelly 0.0.0.0.14+. SSC path not used by SHD reproduction.
+    # Stub as bare object so BinnedSpikingSpeechCommands(SpikingSpeechCommands)
+    # class definition at line 341 still imports; instantiation will fail only
+    # if SSC_dataloaders is actually called.
+    SpikingSpeechCommands = object
 from spikingjelly.datasets import pad_sequence_collate,padded_sequence_mask
 
 import torch
