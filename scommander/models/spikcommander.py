@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 import torch
 import torch.nn as nn
-from spikingjelly.activation_based import functional
+from spikingjelly.activation_based import base as _sj_base
 
 from scommander.models.registry import register, resolve
 
@@ -134,11 +134,12 @@ class SpikCommander(nn.Module):
     def reset(self) -> None:
         """Clear all LIF membrane states between independent sequences.
 
-        Must be called by the training loop before each new batch/sequence to
-        prevent cross-sample membrane leakage.  Wraps
-        ``spikingjelly.activation_based.functional.reset_net``.
+        Walks submodules directly and resets each ``MemoryModule`` — avoids
+        the ``functional.reset_net`` warning on the non-MemoryModule trunk.
         """
-        functional.reset_net(self)
+        for m in self.modules():
+            if isinstance(m, _sj_base.MemoryModule):
+                m.reset()
 
     # ── forward ──────────────────────────────────────────────────────────────
 
