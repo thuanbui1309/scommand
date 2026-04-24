@@ -18,6 +18,8 @@ where valid_T is the number of non-masked time steps (used by SpecAugment).
 
 from __future__ import annotations
 
+import os
+
 import torch
 from torch.utils.data import DataLoader, Dataset
 import torchaudio
@@ -171,6 +173,8 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader, DataLoader]:
     set_seed(seed)
 
     root = str(cfg.dataset.root)
+    # torchaudio SPEECHCOMMANDS doesn't auto-create the cache root — ensure it exists.
+    os.makedirs(root, exist_ok=True)
     batch_size = int(cfg.training.batch_size)
     transform = _build_transform(cfg)
 

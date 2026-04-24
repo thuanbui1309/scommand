@@ -13,6 +13,7 @@ SHD has no separate validation split — test set is used for validation.
 
 from __future__ import annotations
 
+import os
 from typing import Callable, Optional
 
 import numpy as np
@@ -127,6 +128,8 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
     set_seed(seed)
 
     root = str(cfg.dataset.root)
+    # SpikingJelly mkdir's subdirs but not the root — ensure it exists first.
+    os.makedirs(root, exist_ok=True)
     # Reference uses n_bins=5; dataset.n_bins in yaml stores post-binning width=140.
     # Derive raw bin_width: 700 // post_bin_width = 5
     post_bins = int(cfg.dataset.n_bins)      # 140 post-binning neurons

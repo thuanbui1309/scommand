@@ -11,6 +11,7 @@ Dataset shape: (T=100, B=256, N=140). 35 classes. Real train/valid/test splits.
 
 from __future__ import annotations
 
+import os
 from typing import Callable, Optional
 
 import numpy as np
@@ -117,6 +118,8 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader, DataLoader]:
     set_seed(seed)
 
     root = str(cfg.dataset.root)
+    # Tonic mkdir's subdirs but not the root — ensure it exists first.
+    os.makedirs(root, exist_ok=True)
     post_bins = int(cfg.dataset.n_bins)       # 140
     n_bins = _SSC_N_RAW // post_bins           # = 5
     duration = int(cfg.dataset.time_steps)    # ms; 10 -> T=100
