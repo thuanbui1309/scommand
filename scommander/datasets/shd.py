@@ -1,14 +1,25 @@
 """SHD (Spiking Heidelberg Digits) dataset loader.
 
-Ports ``SHD_dataloaders`` + ``BinnedSpikingHeidelbergDigits`` from
-``reference/SpikCommander/SCommander/datasets.py:212-334``.
+Reads events directly from SpikingJelly's cached h5 files and bins to frames
+with equal-time windows. Bypasses ``spikingjelly.datasets.shd`` framing entirely:
 
-Dataset shape: (T=100, B=256, N=140). Binning: 700 neurons / 5 bins = 140.
-The SpikingJelly .h5 cache is seed-sensitive — ``set_seed`` is called before
-``__init__`` to ensure deterministic cache-key generation (see port-map §9).
+- spikingjelly 0.0.0.0.14+ interprets ``duration`` in the h5's t units (seconds
+  for SHD), so ``duration=10`` gives T=1 bin instead of T=100. Verified on
+  server: both our original port and the reference author's code both produce
+  (1, 700) frames on this stack.
+- ``frames_number=100, split_by='time'`` crashes with IndexError on empty bins.
+- ``split_by='number'`` works but produces equal-event bins (not equal-time),
+  breaking paper semantics.
 
-SHD has no separate validation split — test set is used for validation.
-``make_loaders`` returns (train_loader, test_loader).
+Our custom loader:
+  - Open h5 once per worker; lazy-read events per sample.
+  - Equal-time binning over fixed 1.0s clip: ``bin_width = clip_duration_s / T``.
+  - Neuron sum-pool: 700 -> 700 // n_bins = 140.
+  - Returns (T, N) float32 tensors — all samples same shape, no pad needed.
+
+Reference: paper + author code ``reference/SpikCommander/SCommander/datasets.py:
+283-334``; diagnosed at
+``plans/reports/decision-260424-2230-shd-custom-time-binning.md``.
 """
 
 from __future__ import annotations
@@ -16,14 +27,23 @@ from __future__ import annotations
 import os
 from typing import Callable, Optional
 
+import h5py
 import numpy as np
-from torch.utils.data import DataLoader
+import torch
+from torch.utils.data import DataLoader, Dataset
 
+# We still inherit spikingjelly's SpikingHeidelbergDigits indirectly via
+# the download/extract side-effect: we call it once just to populate
+# ``root/extract/shd_{train,test}.h5``. After that we read h5 ourselves.
 from spikingjelly.datasets.shd import SpikingHeidelbergDigits
-from spikingjelly.datasets import pad_sequence_collate
 
 from scommander.augmentations.masking import TimeNeuronMask
 from scommander.utils.seed import set_seed
+
+
+# SHD fixed clip length (audio is 1 second of Heidelberg digit utterances).
+_SHD_CLIP_DURATION_S = 1.0
+_SHD_N_SENSOR = 700
 
 
 class _Augs:
@@ -39,71 +59,110 @@ class _Augs:
         return f"Augs([{self._aug.__class__.__name__}])"
 
 
-class BinnedSpikingHeidelbergDigits(SpikingHeidelbergDigits):
-    """SHD with neuron binning: 700 raw channels -> n_bins per group -> N features.
-
-    Inherits SpikingJelly's SpikingHeidelbergDigits for .h5 loading and
-    cache management. Overrides ``__getitem__`` to bin along the neuron axis
-    via sum-pooling.
+class BinnedSpikingHeidelbergDigits(Dataset):
+    """SHD dataset returning ``(T, N=140)`` equal-time-binned frames.
 
     Args:
-        root: Path to dataset root (contains SHD .h5 files).
-        n_bins: Bin width for neuron axis. Reference: 5 (700//5 = 140 features).
-        train: True for training split, False for test.
-        data_type: Must be ``'frame'`` for binned operation.
-        duration: Frame duration in ms. Reference: 10 (-> T=100 for 1s clips).
-        transform: Optional ``(frame, label) -> (frame, label)`` callable.
-            Applied after binning.
-        target_transform: Optional label transform (unused in baseline).
+        root: Dataset root. Must already contain
+            ``root/extract/shd_{train,test}.h5`` (populated by SpikingJelly
+            on first access).
+        train: Train split (True) or test split (False).
+        n_bins: Neuron-axis bin width. Reference: 5 (700//5 = 140).
+        time_steps: Target T frame count. Reference: 100 for 10ms bins.
+        clip_duration_s: Clip length in seconds. SHD default 1.0.
+        transform: Optional ``(frame, label) -> (frame, label)`` hook.
     """
 
     def __init__(
         self,
         root: str,
-        n_bins: int,
         train: bool = True,
-        data_type: str = "frame",
-        frames_number: Optional[int] = None,
-        split_by: Optional[str] = None,
-        duration: Optional[int] = None,
-        custom_integrate_function: Optional[Callable] = None,
-        custom_integrated_frames_dir_name: Optional[str] = None,
+        n_bins: int = 5,
+        time_steps: int = 100,
+        clip_duration_s: float = _SHD_CLIP_DURATION_S,
         transform: Optional[Callable] = None,
-        target_transform: Optional[Callable] = None,
     ) -> None:
-        super().__init__(
-            root, train, data_type, frames_number, split_by, duration,
-            custom_integrate_function, custom_integrated_frames_dir_name,
-            transform, target_transform,
+        self._h5_path = os.path.join(
+            root, "extract", f"shd_{'train' if train else 'test'}.h5"
         )
+        if not os.path.exists(self._h5_path):
+            raise FileNotFoundError(
+                f"SHD h5 missing at {self._h5_path}. Run SpikingHeidelbergDigits "
+                f"once to populate via download/extract."
+            )
+
+        # Cache labels (small: int per sample). Events loaded lazily per item.
+        with h5py.File(self._h5_path, "r") as f:
+            self._labels = np.asarray(f["labels"])
+
         self.n_bins = n_bins
+        self.time_steps = time_steps
+        self.clip_duration_s = clip_duration_s
+        self.transform = transform
+        self._bin_width = clip_duration_s / time_steps
+        self._binned_n = _SHD_N_SENSOR // n_bins  # 140
 
-    def __getitem__(self, i: int):
-        if self.data_type == "frame":
-            frames = np.load(self.frames_path[i], allow_pickle=True)["frames"].astype(np.float32)
-            label = self.frames_label[i]
+        # Opened per-worker on first __getitem__ (h5py and DataLoader workers
+        # don't mix across fork boundaries cleanly).
+        self._h5_file: Optional[h5py.File] = None
 
-            # Sum-pool along neuron axis: (N_raw, T) -> (N_raw//n_bins, T)
-            # then transpose to (T, N) for the model's (B, T, N) convention
-            # SpikingJelly frame layout: (T, N_raw) e.g. (100, 700).
-            # Bin along neuron axis (axis=1): sum groups of n_bins neurons.
-            # binned_len = 700 // 5 = 140.  Output shape: (T, 140).
-            binned_len = frames.shape[1] // self.n_bins
-            binned_frames = np.zeros((frames.shape[0], binned_len), dtype=np.float32)
-            for k in range(binned_len):
-                binned_frames[:, k] = frames[:, self.n_bins * k: self.n_bins * (k + 1)].sum(axis=1)
+    def _ensure_h5(self) -> h5py.File:
+        if self._h5_file is None:
+            self._h5_file = h5py.File(self._h5_path, "r")
+        return self._h5_file
 
-            if self.transform is not None:
-                binned_frames, label = self.transform(binned_frames, label)
+    def __len__(self) -> int:
+        return len(self._labels)
 
-            return binned_frames, label
+    def __getitem__(self, i: int) -> tuple[np.ndarray, int]:
+        h5 = self._ensure_h5()
+        t = np.asarray(h5["spikes"]["times"][i])
+        x = np.asarray(h5["spikes"]["units"][i], dtype=np.int64)
+        label = int(self._labels[i])
 
-        # Fallback for event mode (unused in baseline)
-        events = {"t": self.h5_file["spikes"]["times"][i], "x": self.h5_file["spikes"]["units"][i]}
-        label = self.h5_file["labels"][i]
+        # Equal-time binning: (T, 700).
+        t_idx = np.clip((t / self._bin_width).astype(np.int64), 0, self.time_steps - 1)
+        frame = np.zeros((self.time_steps, _SHD_N_SENSOR), dtype=np.float32)
+        valid = (x >= 0) & (x < _SHD_N_SENSOR)
+        np.add.at(frame, (t_idx[valid], x[valid]), 1.0)
+
+        # Neuron sum-pool: 700 -> 140.
+        binned = frame[:, : self._binned_n * self.n_bins].reshape(
+            self.time_steps, self._binned_n, self.n_bins
+        ).sum(axis=2)
+
         if self.transform is not None:
-            events, label = self.transform(events, label)
-        return events, label
+            binned, label = self.transform(binned, label)
+        return binned, label
+
+
+def _equal_len_collate(batch):
+    """Collate fn for equal-length (T, N) samples.
+
+    Returns ``(x_batch, y_batch, x_len)`` matching trainer's unpack signature.
+    All samples share T, so x_len = [T] * B (trainer's padded_sequence_mask
+    produces an all-True attention mask under this condition — equivalent
+    to no masking, matching paper which has no padding for SHD).
+    """
+    xs = torch.stack([torch.as_tensor(x, dtype=torch.float32) for x, _ in batch])
+    ys = torch.as_tensor([y for _, y in batch], dtype=torch.long)
+    x_len = torch.full((xs.size(0),), xs.size(1), dtype=torch.long)
+    return xs, ys, x_len
+
+
+def _populate_h5_cache(root: str) -> None:
+    """Trigger SpikingJelly's download/extract side-effect once so h5 files exist.
+
+    We use data_type='event' which skips the buggy duration/frames_number framing;
+    all we need is ``root/extract/shd_{train,test}.h5`` on disk.
+    """
+    if os.path.exists(os.path.join(root, "extract", "shd_train.h5")) and os.path.exists(
+        os.path.join(root, "extract", "shd_test.h5")
+    ):
+        return
+    # Touch both splits to kick off download + extract.
+    SpikingHeidelbergDigits(root, train=True, data_type="event")
+    SpikingHeidelbergDigits(root, train=False, data_type="event")
 
 
 def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
@@ -111,38 +170,27 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
 
     Args:
         cfg: OmegaConf config. Uses:
-            - ``cfg.experiment.seed`` — seeded before dataset init (cache determinism).
+            - ``cfg.experiment.seed`` — seeded before dataset init.
             - ``cfg.dataset.root`` — filesystem path to SHD data.
-            - ``cfg.dataset.n_bins`` — neuron bin width (reference: 140 post-binning
-              means n_bins=5 applied to 700 raw neurons).
-            - ``cfg.dataset.time_steps`` — frame duration in ms (reference: 10 -> T=100).
+            - ``cfg.dataset.n_bins`` — post-binning neuron count (140 ->
+              bin_width=5 over 700 raw sensors).
+            - ``cfg.dataset.time_steps`` — target T frame count.
             - ``cfg.training.batch_size``.
-            - ``cfg.augmentation.enabled``.
-            - ``cfg.augmentation.eventdrop.*`` — time/neuron mask params.
+            - ``cfg.augmentation.enabled`` and ``.eventdrop.*``.
 
     Returns:
         ``(train_loader, test_loader)`` — SHD test set doubles as validation.
     """
     seed = int(cfg.experiment.seed)
-    # Critical: seed before dataset __init__ for Tonic cache-key determinism
     set_seed(seed)
 
     root = str(cfg.dataset.root)
-    # SpikingJelly mkdir's subdirs but not the root — ensure it exists first.
     os.makedirs(root, exist_ok=True)
-    # Reference uses n_bins=5; dataset.n_bins in yaml stores post-binning width=140.
-    # Derive raw bin_width: 700 // post_bin_width = 5
-    post_bins = int(cfg.dataset.n_bins)      # 140 post-binning neurons
-    raw_neurons = 700
-    n_bins = raw_neurons // post_bins         # = 5 bin-width
+    _populate_h5_cache(root)
 
-    # SpikingJelly's `duration` is integer in event-t units (SHD: seconds →
-    # duration=10 yields T=1 bin since clips are ~0.7s). Use `frames_number`
-    # mode with `split_by='number'` — splits events into T equal-count groups.
-    # `split_by='time'` would give equal-time bins but trips an IndexError in
-    # spikingjelly 0.0.0.0.14 when a bin is empty. Equal-count is the ref
-    # alternative and matches what DVS Gesture/SHD examples use.
-    frames_number = int(cfg.dataset.time_steps)   # 100
+    post_bins = int(cfg.dataset.n_bins)          # 140 post-binning
+    n_bins = _SHD_N_SENSOR // post_bins           # = 5 bin-width
+    time_steps = int(cfg.dataset.time_steps)     # 100
     batch_size = int(cfg.training.batch_size)
     aug_enabled = bool(cfg.augmentation.enabled)
 
@@ -159,36 +207,21 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
         transform = _Augs(aug)
 
     train_dataset = BinnedSpikingHeidelbergDigits(
-        root=root,
-        n_bins=n_bins,
-        train=True,
-        data_type="frame",
-        frames_number=frames_number,
-        split_by="number",
-        transform=transform,
+        root=root, train=True, n_bins=n_bins,
+        time_steps=time_steps, transform=transform,
     )
     test_dataset = BinnedSpikingHeidelbergDigits(
-        root=root,
-        n_bins=n_bins,
-        train=False,
-        data_type="frame",
-        frames_number=frames_number,
-        split_by="number",
-        transform=None,
+        root=root, train=False, n_bins=n_bins,
+        time_steps=time_steps, transform=None,
     )
 
     train_loader = DataLoader(
-        train_dataset,
-        collate_fn=pad_sequence_collate,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=4,
+        train_dataset, collate_fn=_equal_len_collate,
+        batch_size=batch_size, shuffle=True, num_workers=4,
     )
     test_loader = DataLoader(
-        test_dataset,
-        collate_fn=pad_sequence_collate,
-        batch_size=batch_size,
-        num_workers=4,
+        test_dataset, collate_fn=_equal_len_collate,
+        batch_size=batch_size, num_workers=4,
     )
 
     return train_loader, test_loader
