@@ -1,0 +1,36 @@
+# Core (Blackwell sm_120 requires torch >=2.7.0+cu128; driver ≥570, CUDA 12.8)
+torch>=2.7.0
+torchaudio>=2.7.0
+torchvision>=0.22.0
+
+# Spiking (cupy >=13.3 for sm_120 compute capability support)
+spikingjelly>=0.0.0.0.14
+cupy-cuda12x>=13.3
+
+# Datasets
+tonic>=1.5.0
+
+# SSM (Track C)
+mamba-ssm>=2.0.0
+causal-conv1d>=1.2.0
+
+# Metrics / Efficiency
+syops-counter>=0.1.0
+
+# Config + Utilities
+pyyaml>=6.0
+omegaconf>=2.3.0
+einops>=0.7.0
+numpy>=1.24,<2.0
+scipy>=1.10.0
+tqdm>=4.66
+
+# Experiment tracking (optional)
+tensorboard>=2.15.0
+wandb>=0.16.0
+
+# Testing + Lint
+pytest>=7.4.0
+pytest-cov>=4.1.0
+ruff>=0.3.0
+black>=24.0.0

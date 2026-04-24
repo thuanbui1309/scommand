@@ -1,0 +1,73 @@
+# SCommander base config. Variant configs override selectively.
+
+experiment:
+  seed: 312
+  run_id: null  # auto-generated if null
+  output_dir: runs
+
+training:
+  epochs: 300
+  batch_size: 256
+  dropout: 0.1
+  optimizer: adamw
+  lr: 5.0e-3
+  weight_decay: 1.0e-2
+  scheduler:
+    name: cosine_annealing
+    t_max: 40
+  grad_clip: 1.0
+  precision: fp32    # locked; AMP only via override
+  amp: false         # row-level runs.csv flag if overridden
+  gc: null           # null=auto per decision tree (see docs/gc-policy.md); override bool
+
+model:
+  arch: spikcommander
+  depth: 1           # 1L baseline; 2L via override
+  dim: 256           # 128 for SHD; 256 for SSC/GSC
+  n_heads: 16        # 8 for SHD; 16 otherwise
+  expansion: 4       # SCR-MLP expansion ratio alpha
+  window_radius: 20  # SWA-STASA w; scales with T (w = round(T*0.2))
+
+neuron:
+  type: lif          # lif | plif (adaptive)
+  tau: 2.0
+  v_threshold: 1.0
+  v_reset: 0.5
+  surrogate:
+    name: atan
+    alpha: 5.0
+  backend: cupy      # cupy (fast) | torch (fallback)
+
+dataset:
+  name: null         # override with dataset/shd.yaml | ssc.yaml | gsc.yaml
+  time_steps: 100
+  n_bins: 140        # post-binning for SHD/SSC; Mel bins for GSC
+  root: data
+
+augmentation:
+  enabled: true
+  # SpecAugment (Mel)
+  specaug:
+    n_freq_masks: 1
+    freq_mask_size: 10
+    n_time_masks: 1
+    time_mask_pct: 0.25
+  # EventDrop (spike)
+  eventdrop:
+    drop_prob: 0.5
+    time_drop_size_pct: 0.2   # SHD; 0.1 for SSC
+    neuron_drop_size: 20      # SHD; 10 for SSC
+
+loss:
+  ce:
+    enabled: true
+  sparsity:
+    enabled: false
+    lambda: 1.0e-3             # sweep 1e-4 → 1e-2; per-dataset calibration in Phase 07
+    target_fr: 0.10             # 10 Hz-equivalent, normalized
+  kd:
+    enabled: false
+    teacher: null               # ast (GSC) | ema (SHD/SSC)
+    logit_kl_weight: 1.0
+    feature_align_weight: 0.5
+    temperature: 4.0

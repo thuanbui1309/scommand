@@ -1,0 +1,22 @@
+# SHD: Spiking Heidelberg Digits. 10k samples, 20 classes.
+dataset:
+  name: shd
+  time_steps: 100
+  n_bins: 140
+  bin_width_ms: 10     # dt; 1000ms / dt = T
+  root: data/SHD
+
+training:
+  epochs: 500
+  lr: 1.0e-2
+  weight_decay: 1.0e-2
+
+model:
+  depth: 1
+  dim: 128
+  n_heads: 8
+
+augmentation:
+  eventdrop:
+    time_drop_size_pct: 0.2
+    neuron_drop_size: 20

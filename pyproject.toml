@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scommander"
+version = "0.0.1"
+description = "Spiking Transformer with SSM-Attention Hybrid for Speech Command Recognition"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Anonymous", email = "anon@example.com"},
+]
+
+dependencies = [
+    # Blackwell sm_120 needs torch >=2.7.0+cu128 (server: RTX 5090, driver 570.211.01, CUDA 12.8)
+    "torch>=2.7.0",
+    "torchaudio>=2.7.0",
+    "spikingjelly>=0.0.0.0.14",
+    "tonic>=1.5.0",
+    "syops-counter>=0.1.0",
+    "pyyaml>=6.0",
+    "omegaconf>=2.3.0",
+    "einops>=0.7.0",
+    "numpy>=1.24,<2.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+ssm = ["mamba-ssm>=2.0.0", "causal-conv1d>=1.2.0"]
+tracking = ["tensorboard>=2.15.0", "wandb>=0.16.0"]
+dev = ["pytest>=7.4.0", "pytest-cov>=4.1.0", "ruff>=0.3.0", "black>=24.0.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["scommander*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"

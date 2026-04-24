@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Virtual envs (if installed in-tree)
+.venv/
+venv/
+env/
+
+# Conda env export (user-specific)
+environment.yml
+
+# ML artifacts
+data/
+checkpoints/
+log_files/
+runs/
+wandb/
+tb_logs/
+outputs/
+*.ckpt
+*.pt
+*.pth
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Secrets
+.env
+.env.local
+*.pem
+*.key

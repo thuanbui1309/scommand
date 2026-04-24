@@ -1,0 +1,26 @@
+# GSC: Google Speech Commands V2. 100k samples, 35 classes. Real-valued Mel input.
+dataset:
+  name: gsc
+  time_steps: 100
+  n_bins: 140            # Mel frequency bins
+  sampling_rate: 8000    # downsample from 16k
+  window_size: 256       # ~32ms
+  hop_length: 80         # yields T=100
+  root: data/GSC
+
+training:
+  epochs: 300
+  lr: 2.0e-3
+  weight_decay: 5.0e-3
+
+model:
+  depth: 2
+  dim: 256
+  n_heads: 16
+
+augmentation:
+  specaug:
+    n_freq_masks: 1
+    freq_mask_size: 10
+    n_time_masks: 1
+    time_mask_pct: 0.25
