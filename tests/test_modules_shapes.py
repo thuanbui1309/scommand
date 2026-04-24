@@ -64,7 +64,7 @@ def test_sum_aggregator_collapses_time() -> None:
     assert torch.allclose(out, x.sum(dim=0))
 
 
-def test_classifier_head_shape() -> None:
+def test_classifier_head_shape_2d() -> None:
     head_cls = resolve("classifier", "linear_head")
     head = head_cls(in_features=128, num_classes=20)
     x = torch.randn(4, 128)
@@ -72,12 +72,21 @@ def test_classifier_head_shape() -> None:
     assert logits.shape == (4, 20)
 
 
-def test_classifier_head_param_count() -> None:
-    """Phase 01 param count sanity: linear_head(D=128, C=20) = 128*20 + 20 = 2580."""
+def test_classifier_head_shape_3d() -> None:
+    """Head is per-timestep (matches ref step_mode='m'): (T,B,D)->(T,B,C)."""
     head_cls = resolve("classifier", "linear_head")
-    head = head_cls(in_features=128, num_classes=20, bias=True)
+    head = head_cls(in_features=128, num_classes=20)
+    x = torch.randn(20, 4, 128)   # (T, B, D)
+    logits = head(x)
+    assert logits.shape == (20, 4, 20)
+
+
+def test_classifier_head_param_count_no_bias() -> None:
+    """Default bias=False (ref parity): linear_head(D=128, C=20) = 128*20 = 2560."""
+    head_cls = resolve("classifier", "linear_head")
+    head = head_cls(in_features=128, num_classes=20)
     n = sum(p.numel() for p in head.parameters())
-    assert n == 128 * 20 + 20
+    assert n == 128 * 20
 
 
 # ── Phase 01 extension: SCR-MLP, STASA, SpikCommander trunk ─────────────────
@@ -129,7 +138,7 @@ def test_stasa_long_range_factory_injection(shd_batch_tbd: torch.Tensor) -> None
 
 
 def test_trunk_forward_shape_shd(shd_batch: torch.Tensor) -> None:
-    """SpikCommander SHD config: (B, T, F) -> (B, C)."""
+    """SpikCommander SHD config: (B, T, F) -> (T, B, C) per-timestep logits."""
     model_cls = resolve("model", "spikcommander")
     model = model_cls(
         in_features=140,
@@ -142,7 +151,8 @@ def test_trunk_forward_shape_shd(shd_batch: torch.Tensor) -> None:
     )
     model.reset()
     out = model(shd_batch)
-    assert out.shape == (4, 20), f"got {tuple(out.shape)}"
+    B, T, _ = shd_batch.shape
+    assert out.shape == (T, B, 20), f"got {tuple(out.shape)}"
 
 
 def test_trunk_backward_grad_flows_shd(shd_batch: torch.Tensor) -> None:

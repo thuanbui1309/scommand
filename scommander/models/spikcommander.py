@@ -1,10 +1,15 @@
 """SpikCommander: full trunk model.
 
-Assembles SEE encoder → L × (STASA + SCR-MLP) blocks → aggregator → classifier.
+Assembles SEE encoder → L × (STASA + SCR-MLP) blocks → per-timestep classifier.
 
 Shape contract:
     Input:  ``(B, T, F_raw)``   raw binned spike features
-    Output: ``(B, C)``          pre-softmax class logits
+    Output: ``(T, B, C)``       per-timestep pre-softmax logits
+
+Time aggregation is **outside** the model — ``losses/ce.py`` sums
+``Softmax(logits, dim=-1)`` over T before CE, matching reference
+``calc_loss(config, output, y)`` with ``config.loss='sum'`` (see
+``reference/SpikCommander/SCommander/main_former_v2_*.py:26-41``).
 
 Reset semantics:
     SpikingJelly neurons maintain per-sample membrane state across forward calls.
@@ -120,13 +125,13 @@ class SpikCommander(nn.Module):
             for _ in range(depth)
         ])
 
-        # Sum-over-time aggregator: (T, B, D) → (B, D)
-        self.aggregator = resolve("aggregator", "sum_over_time")()
-
-        # Linear classifier: (B, D) → (B, C)
+        # Per-timestep linear classifier: (T, B, D) → (T, B, C).
+        # bias=False matches reference ``layer.Linear(..., bias=False, step_mode='m')``.
+        # Time aggregation moved to the loss function (see module docstring).
         self.head = resolve("classifier", "linear_head")(
             in_features=dim,
             num_classes=num_classes,
+            bias=False,
         )
 
     # ── reset ────────────────────────────────────────────────────────────────
@@ -155,7 +160,7 @@ class SpikCommander(nn.Module):
             attention_mask: Optional ``(B, T)`` bool mask (True=attend, False=pad).
 
         Returns:
-            ``(B, C)`` pre-softmax logits.
+            ``(T, B, C)`` per-timestep pre-softmax logits.
         """
         # (B, T, F_raw) → (T, B, D)
         x = self.see(x)
@@ -164,10 +169,7 @@ class SpikCommander(nn.Module):
         for blk in self.blocks:
             x = blk(x, attention_mask=attention_mask)
 
-        # (T, B, D) → (B, D)
-        x = self.aggregator(x)
-
-        # (B, D) → (B, C)
+        # (T, B, D) → (T, B, C). nn.Linear acts on last dim; leading (T,B) preserved.
         return self.head(x)
 
     def extra_repr(self) -> str:
