@@ -6,5 +6,6 @@ global component registry by touching every module that declares
 """
 
 from scommander.models.registry import REGISTRY, build_model, register, resolve
+from scommander.models.spikcommander import SpikCommander  # noqa: F401 — triggers @register
 
-__all__ = ["REGISTRY", "build_model", "register", "resolve"]
+__all__ = ["REGISTRY", "SpikCommander", "build_model", "register", "resolve"]
