@@ -90,18 +90,20 @@ class SEE(nn.Module):
         # (B, D, T) -> (T, B, D)  — now in spikingjelly multi-step layout
         x = x.permute(2, 0, 1).contiguous()
 
-        x = self.bn1(x)                    # (T, B, D)
+        # spikingjelly 0.0.0.0.14 layer.BatchNorm1d step_mode='m' requires 4D (T, N, C, L);
+        # LIF / Linear accept 3D (T, B, D). Gate BN with unsqueeze/squeeze to bridge.
+        x = self.bn1(x.unsqueeze(-1)).squeeze(-1)   # (T, B, D)
         x = self.lif1(x)
         x = self.dropout1(x)
 
         residual = x
-        x = self.linear(x)                 # (T, B, D) — Linear acts on last dim
-        x = self.bn2(x)
+        x = self.linear(x)                          # (T, B, D) — Linear acts on last dim
+        x = self.bn2(x.unsqueeze(-1)).squeeze(-1)   # (T, B, D)
         x = self.lif2(x)
         x = self.dropout2(x)
-        x = x + residual                   # Eq 5
+        x = x + residual                            # Eq 5
 
-        return x                           # (T, B, D)
+        return x                                    # (T, B, D)
 
     def extra_repr(self) -> str:
         return f"in={self.in_features}, out={self.out_features}"
