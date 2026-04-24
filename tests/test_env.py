@@ -66,10 +66,8 @@ def test_base_config_load_omegaconf() -> None:
     assert cfg_path.exists(), f"base.yaml missing at {cfg_path}"
 
     cfg = OmegaConf.load(cfg_path)
-    amp = OmegaConf.select(cfg, "amp", default=None)
-    if amp is None:
-        amp = OmegaConf.select(cfg, "train.amp", default=None)
-    assert amp is False, f"amp must default to false (locked precision policy); got {amp!r}"
+    amp = OmegaConf.select(cfg, "training.amp", default=None)
+    assert amp is False, f"training.amp must default to false (locked precision policy); got {amp!r}"
 
 
 def test_json_logger(tmp_path) -> None:

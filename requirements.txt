@@ -3,9 +3,10 @@ torch>=2.7.0
 torchaudio>=2.7.0
 torchvision>=0.22.0
 
-# Spiking (cupy >=13.3 for sm_120 compute capability support)
+# Spiking (cupy pinned <14 — cupy 14.x requires numpy>=2 which conflicts with tonic<2.0;
+# cupy 13.6 is latest 13.x series, supports sm_120 via PTX JIT path)
 spikingjelly>=0.0.0.0.14
-cupy-cuda12x>=13.3
+cupy-cuda12x>=13.3,<14
 
 # Datasets
 tonic>=1.5.0

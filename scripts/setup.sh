@@ -126,8 +126,8 @@ fi
 # cupy separate (not in pyproject because version depends on CUDA major)
 if [ "$NO_SSM" = false ] && [ "$SKIP_CUDA" = false ]; then
   if ! python -c "import cupy" 2>/dev/null; then
-    log "installing cupy-cuda12x"
-    uv pip install cupy-cuda12x || warn "cupy install failed (will fall back to PyTorch backend, ~3x slower)"
+    log "installing cupy-cuda12x (<14 — tonic pins numpy<2; cupy 14.x requires numpy>=2)"
+    uv pip install "cupy-cuda12x>=13.3,<14" || warn "cupy install failed (will fall back to PyTorch backend, ~3x slower)"
   else
     ok "cupy already importable"
   fi
