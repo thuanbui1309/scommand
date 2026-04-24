@@ -136,9 +136,12 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
     raw_neurons = 700
     n_bins = raw_neurons // post_bins         # = 5 bin-width
 
-    # SpikingJelly's `duration` is in the event's `t` units (seconds for SHD)
-    # and must be integer → cannot pass 0.01. Use `frames_number` mode with
-    # `split_by='time'` to get exactly T=time_steps equal-time chunks per clip.
+    # SpikingJelly's `duration` is integer in event-t units (SHD: seconds →
+    # duration=10 yields T=1 bin since clips are ~0.7s). Use `frames_number`
+    # mode with `split_by='number'` — splits events into T equal-count groups.
+    # `split_by='time'` would give equal-time bins but trips an IndexError in
+    # spikingjelly 0.0.0.0.14 when a bin is empty. Equal-count is the ref
+    # alternative and matches what DVS Gesture/SHD examples use.
     frames_number = int(cfg.dataset.time_steps)   # 100
     batch_size = int(cfg.training.batch_size)
     aug_enabled = bool(cfg.augmentation.enabled)
@@ -161,7 +164,7 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
         train=True,
         data_type="frame",
         frames_number=frames_number,
-        split_by="time",
+        split_by="number",
         transform=transform,
     )
     test_dataset = BinnedSpikingHeidelbergDigits(
@@ -170,7 +173,7 @@ def make_loaders(cfg) -> tuple[DataLoader, DataLoader]:
         train=False,
         data_type="frame",
         frames_number=frames_number,
-        split_by="time",
+        split_by="number",
         transform=None,
     )
 
