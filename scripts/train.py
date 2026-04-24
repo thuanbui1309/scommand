@@ -25,6 +25,14 @@ from datetime import datetime
 # Allow running as `python -m scripts.train` from src/
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# spikingjelly's cupy LIF kernel (auto_cuda/base.py:249) still references
+# np.int, removed in numpy >=1.20. Restore the alias before any import chain
+# touches spikingjelly. Harmless no-op on older numpy.
+import numpy as _np  # noqa: E402
+
+if not hasattr(_np, "int"):
+    _np.int = int  # type: ignore[attr-defined]
+
 import torch
 from omegaconf import OmegaConf
 
