@@ -141,7 +141,9 @@ def test_semoe_expert_count_mismatch_raises() -> None:
 
 def test_build_model_picks_semoe_when_configured() -> None:
     """End-to-end: build_model resolves attention=semoe and forwards (B,T,F)→(T,B,C)."""
-    cfg = {
+    from omegaconf import OmegaConf
+
+    cfg = OmegaConf.create({
         "dataset": {"name": "shd"},
         "model": {
             "arch": "spikcommander",
@@ -159,9 +161,9 @@ def test_build_model_picks_semoe_when_configured() -> None:
             },
         },
         "neuron": {"tau": 2.0, "v_threshold": 1.0, "v_reset": 0.5,
-                   "surrogate": "atan", "alpha": 5.0, "backend": "torch"},
+                   "surrogate": {"name": "atan", "alpha": 5.0}, "backend": "torch"},
         "training": {"dropout": 0.0},
-    }
+    })
     model = build_model(cfg)
     # At least one SeMoE block must be wired into the trunk
     semoe_blocks = [m for m in model.modules() if isinstance(m, SeMoEBlock)]
