@@ -7,8 +7,9 @@ and ``main_former_v2_gsc_spikcommander.py:110-258``.
 Design notes
 ------------
 - **No EMA** — not used in any reference training script.
-- **No gradient clipping** — reference does not use it; ``cfg.training.grad_clip``
-  is present in base.yaml for future tracks but ignored here. Documented below.
+- **Gradient clipping** — optional via ``cfg.training.grad_clip`` (default null
+  in base.yaml = disabled, matches Phase 02 baseline). Phase 05 C1 Spiking
+  Mamba enables it (clip=1.0) for SSM stability.
 - **Reset semantics** — ``model.reset()`` is called after every batch (train + eval).
   The reference uses ``functional.reset_net(model)``. Our ``SpikCommander.reset()``
   walks submodules directly and is functionally equivalent. Using ``model.reset()``
@@ -21,8 +22,6 @@ Design notes
   ``attention_mask.transpose(0,1).to(device)``.
 - **Checkpoint naming** — ``best_acc.pt`` and ``best_loss.pt`` state dicts saved to
   ``run_dir``. CSV row appended each epoch: loss_train,acc_train,loss_val,acc_val,lr,time.
-- **grad_clip ignored** — ``cfg.training.grad_clip=1.0`` in base.yaml is intentionally
-  not applied in baseline. Phase 03+ tracks may enable it via override.
 """
 
 from __future__ import annotations
@@ -96,6 +95,8 @@ def train(
 
     loss_fn = SumSoftmaxCE()
 
+    grad_clip_val = float(cfg.training.grad_clip) if cfg.training.get("grad_clip") else None
+
     sparsity_cfg = cfg.loss.get("sparsity", None) if hasattr(cfg, "loss") else None
     sparsity_enabled = bool(sparsity_cfg.enabled) if sparsity_cfg is not None else False
     fr_penalty: Optional[FiringRatePenalty] = None
@@ -147,6 +148,8 @@ def train(
                 loss = loss_fn(logits, y_onehot)
 
             loss.backward()
+            if grad_clip_val is not None and grad_clip_val > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_val)
             optimizer.step()
 
             acc = accuracy_from_logits(logits.detach(), y_onehot)

@@ -1,0 +1,6 @@
+# Phase 05 C1: replace LRA branch with Spiking Mamba SSM.
+model:
+  long_range_branch: spiking_mamba
+
+training:
+  grad_clip: 1.0    # SSM stability per phase-05 risk mitigation

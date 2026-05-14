@@ -15,7 +15,7 @@ training:
   scheduler:
     name: cosine_annealing
     t_max: 40
-  grad_clip: 1.0
+  grad_clip: null    # disabled by default (matches Phase 02 baseline); Track C enables via override
   precision: fp32    # locked; AMP only via override
   amp: false         # row-level runs.csv flag if overridden
   gc: null           # null=auto per decision tree (see docs/gc-policy.md); override bool

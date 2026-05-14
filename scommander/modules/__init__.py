@@ -12,6 +12,15 @@ from scommander.modules.scr_mlp import SCRMLP
 from scommander.modules.see import SEE
 from scommander.modules.stasa import LRABranch, STASA
 
+# Spiking Mamba requires mamba_ssm; import is best-effort so the package
+# still works on CPU-only / mamba-less environments (registry slot simply
+# stays empty and resolve("long_range_branch", "spiking_mamba") will raise
+# a clean KeyError with hint).
+try:
+    from scommander.modules.spiking_mamba import SpikingMambaBranch
+except ImportError:
+    SpikingMambaBranch = None
+
 __all__ = [
     "ClassifierHead",
     "LIFNode",
@@ -20,6 +29,7 @@ __all__ = [
     "SCRMLP",
     "SEE",
     "STASA",
+    "SpikingMambaBranch",
     "SumAggregator",
     "make_lif",
 ]
