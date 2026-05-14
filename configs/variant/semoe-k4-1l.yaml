@@ -1,0 +1,15 @@
+# SeMoE K=4 with depth=1 — scaling ablation for SSC + GSC.
+# Use this with --dataset ssc or gsc to run the 1L variant matching paper
+# Table 1's "(1L-16-256)" rows (1.12M baseline params).
+
+model:
+  attention: semoe
+  depth: 1                # override SSC/GSC default depth=2
+  semoe:
+    num_experts: 4
+    expert_types: [swa, lra, swa_local, identity]
+    small_window: 5
+    load_balance_weight: 0.01
+
+training:
+  grad_clip: 1.0
