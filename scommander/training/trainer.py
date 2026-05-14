@@ -42,7 +42,7 @@ from scommander.augmentations.spec_aug import SpecAugment
 from scommander.datasets import padded_sequence_mask
 from scommander.losses.ce import SumSoftmaxCE, accuracy_from_logits
 from scommander.losses.sparsity import FiringRateCollector, FiringRatePenalty
-from scommander.modules.semoe import collect_semoe_aux_loss
+from scommander.modules.semoe import collect_semoe_aux_loss, collect_semoe_expert_usage
 
 
 def train(
@@ -116,12 +116,18 @@ def train(
         writer = csv.writer(f)
         writer.writerow(["epoch", "loss_train", "acc_train", "loss_val", "acc_val", "lr", "time_s"])
 
+    # Per-epoch SeMoE expert-usage CSV (only created when SeMoE blocks are present).
+    semoe_usage_path = os.path.join(run_dir, "semoe_expert_usage.csv")
+    semoe_usage_initialized = False
+
     for epoch in range(num_epochs):
         t0 = time.time()
 
         # ── Train ────────────────────────────────────────────────────────────
         model.train()
         loss_batch, acc_batch = [], []
+        semoe_usage_acc: dict[str, torch.Tensor] = {}
+        semoe_usage_n = 0
 
         for x, y, x_len in tqdm(train_loader, desc=f"Epoch {epoch} train", leave=False):
             # Build attention mask: padded_sequence_mask -> (T, B) -> transpose -> (B, T)
@@ -159,6 +165,14 @@ def train(
             acc = accuracy_from_logits(logits.detach(), y_onehot)
             loss_batch.append(loss.detach().cpu().item())
             acc_batch.append(acc)
+
+            # Accumulate SeMoE expert usage for this batch (no-op if no block)
+            for name, vec in collect_semoe_expert_usage(model).items():
+                if name not in semoe_usage_acc:
+                    semoe_usage_acc[name] = torch.zeros_like(vec)
+                semoe_usage_acc[name] += vec
+            if semoe_usage_acc:
+                semoe_usage_n += 1
 
             model.reset()
 
@@ -220,6 +234,29 @@ def train(
                 f"{current_lr:.8f}",
                 f"{elapsed:.2f}",
             ])
+
+        # ── SeMoE expert-usage log ────────────────────────────────────────────
+        if semoe_usage_acc and semoe_usage_n > 0:
+            block_names = sorted(semoe_usage_acc.keys())
+            K = semoe_usage_acc[block_names[0]].numel()
+            if not semoe_usage_initialized:
+                header = ["epoch"]
+                for bn in block_names:
+                    header += [f"{bn}_e{k}" for k in range(K)]
+                with open(semoe_usage_path, "w", newline="") as f:
+                    csv.writer(f).writerow(header)
+                semoe_usage_initialized = True
+            row = [epoch]
+            usage_summary = []
+            for bn in block_names:
+                avg = (semoe_usage_acc[bn] / semoe_usage_n).tolist()
+                row += [f"{v:.4f}" for v in avg]
+                usage_summary.append(
+                    f"{bn}=[" + ", ".join(f"{v:.2f}" for v in avg) + "]"
+                )
+            with open(semoe_usage_path, "a", newline="") as f:
+                csv.writer(f).writerow(row)
+            print(f"  SeMoE usage: {' '.join(usage_summary)}")
 
     return {
         "best_acc": best_acc_val,

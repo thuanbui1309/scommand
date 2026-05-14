@@ -33,16 +33,16 @@ from scommander.modules.lif import make_lif
 
 # ── Expert primitives ───────────────────────────────────────────────────────
 #
-# Each expert maps spikes (T, B, D) → activations (T, B, D_e). Experts are
-# intentionally thinner than full STASA (D_e ≤ D) so the K-expert sum stays
-# under the baseline parameter budget.
+# Experts operate purely in D_e space. SeMoEBlock owns a single shared
+# input projection (D → D_e) so the per-expert qkv conv only sees D_e and
+# stays at ~12K params per spec, instead of ~24K when each expert projects
+# from D directly.
 
 class _SWAExpert(nn.Module):
-    """Sliding-window attention expert (no LRA branch)."""
+    """Sliding-window attention expert (no LRA branch). Operates in D_e space."""
 
     def __init__(
         self,
-        dim: int,
         expert_dim: int,
         num_heads: int,
         window: int,
@@ -50,35 +50,30 @@ class _SWAExpert(nn.Module):
     ) -> None:
         super().__init__()
         assert expert_dim % num_heads == 0, "expert_dim must divide num_heads"
-        self.dim = dim
         self.expert_dim = expert_dim
         self.num_heads = num_heads
         self.dh = expert_dim // num_heads
         self.window = window
         self.scale = 1.0 / math.sqrt(self.dh * (2 * window + 1))
 
-        # In-projection: D -> D_e for Q, K, V (single conv1d stacked × 3 lifs)
-        self.qkv_conv = nn.Conv1d(dim, expert_dim * 3, kernel_size=1, bias=False)
+        self.qkv_conv = nn.Conv1d(expert_dim, expert_dim * 3, kernel_size=1, bias=False)
         self.qkv_bn = layer.BatchNorm1d(expert_dim * 3, step_mode="m")
         self.q_lif = make_lif(neuron_cfg)
         self.k_lif = make_lif(neuron_cfg)
         self.v_lif = make_lif(neuron_cfg)
-
         self.local_attn_lif = make_lif(neuron_cfg)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (T, B, D)
-        T, B, _ = x.shape
-        x_bdt = x.permute(1, 2, 0).contiguous()
-        qkv = self.qkv_conv(x_bdt)                     # (B, 3*D_e, T)
-        qkv = qkv.permute(2, 0, 1).contiguous()        # (T, B, 3*D_e)
+    def forward(self, x_e: torch.Tensor) -> torch.Tensor:
+        # x_e: (T, B, D_e)
+        T, B, _ = x_e.shape
+        x_bdt = x_e.permute(1, 2, 0).contiguous()
+        qkv = self.qkv_conv(x_bdt).permute(2, 0, 1).contiguous()
         qkv = self.qkv_bn(qkv.unsqueeze(-1)).squeeze(-1)
-        q_, k_, v_ = qkv.chunk(3, dim=-1)              # each (T, B, D_e)
+        q_, k_, v_ = qkv.chunk(3, dim=-1)
         q = self.q_lif(q_).reshape(T, B, self.num_heads, self.dh)
         k = self.k_lif(k_).reshape(T, B, self.num_heads, self.dh)
         v = self.v_lif(v_).reshape(T, B, self.num_heads, self.dh)
 
-        # Sliding window: pad T then unfold (B, H, T, Dh)
         q_bhdt = q.permute(1, 2, 0, 3).contiguous()
         k_bhdt = k.permute(1, 2, 0, 3).contiguous()
         w = self.window
@@ -86,19 +81,18 @@ class _SWAExpert(nn.Module):
         k_pad = F.pad(k_bhdt, (0, 0, w, w))
         q_win = q_pad.unfold(2, 2 * w + 1, 1).permute(0, 1, 2, 4, 3).sum(dim=3)
         k_win = k_pad.unfold(2, 2 * w + 1, 1).permute(0, 1, 2, 4, 3).sum(dim=3)
-        q_sum = q_win.permute(2, 0, 1, 3).contiguous()  # (T, B, H, Dh)
+        q_sum = q_win.permute(2, 0, 1, 3).contiguous()
         k_sum = k_win.permute(2, 0, 1, 3).contiguous()
         gate = self.local_attn_lif((q_sum + k_sum) * self.scale)
-        out = gate * v                                  # (T, B, H, Dh)
+        out = gate * v
         return out.reshape(T, B, self.expert_dim)
 
 
 class _LRAExpert(nn.Module):
-    """Long-range attention expert: global Q+K sum gates V."""
+    """Global Q+K-sum attention expert. Operates in D_e space."""
 
     def __init__(
         self,
-        dim: int,
         expert_dim: int,
         num_heads: int,
         neuron_cfg: dict[str, Any] | None = None,
@@ -109,16 +103,16 @@ class _LRAExpert(nn.Module):
         self.num_heads = num_heads
         self.dh = expert_dim // num_heads
 
-        self.qkv_conv = nn.Conv1d(dim, expert_dim * 3, kernel_size=1, bias=False)
+        self.qkv_conv = nn.Conv1d(expert_dim, expert_dim * 3, kernel_size=1, bias=False)
         self.qkv_bn = layer.BatchNorm1d(expert_dim * 3, step_mode="m")
         self.q_lif = make_lif(neuron_cfg)
         self.k_lif = make_lif(neuron_cfg)
         self.v_lif = make_lif(neuron_cfg)
         self.global_attn_lif = make_lif(neuron_cfg)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        T, B, _ = x.shape
-        x_bdt = x.permute(1, 2, 0).contiguous()
+    def forward(self, x_e: torch.Tensor) -> torch.Tensor:
+        T, B, _ = x_e.shape
+        x_bdt = x_e.permute(1, 2, 0).contiguous()
         qkv = self.qkv_conv(x_bdt).permute(2, 0, 1).contiguous()
         qkv = self.qkv_bn(qkv.unsqueeze(-1)).squeeze(-1)
         q_, k_, v_ = qkv.chunk(3, dim=-1)
@@ -130,52 +124,44 @@ class _LRAExpert(nn.Module):
         q_sum_all = q.sum(dim=0, keepdim=True)
         k_sum_all = k.sum(dim=0, keepdim=True)
         gate_all = self.global_attn_lif((q_sum_all + k_sum_all) * scale)
-        out = gate_all * v                              # (T, B, H, Dh)
+        out = gate_all * v
         return out.reshape(T, B, self.expert_dim)
 
 
 class _IdentityExpert(nn.Module):
-    """Pass-through expert: project D→D_e then a single LIF (cheap, for silent frames)."""
+    """Pass-through expert: single LIF on the shared D_e input. Near-zero params."""
 
     def __init__(
         self,
-        dim: int,
         expert_dim: int,
         neuron_cfg: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
         self.expert_dim = expert_dim
-        self.proj = nn.Conv1d(dim, expert_dim, kernel_size=1, bias=False)
-        self.bn = layer.BatchNorm1d(expert_dim, step_mode="m")
         self.lif = make_lif(neuron_cfg)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        T, B, _ = x.shape
-        x_bdt = x.permute(1, 2, 0).contiguous()
-        out = self.proj(x_bdt).permute(2, 0, 1).contiguous()
-        out = self.bn(out.unsqueeze(-1)).squeeze(-1)
-        return self.lif(out)
+    def forward(self, x_e: torch.Tensor) -> torch.Tensor:
+        return self.lif(x_e)
 
 
 def _build_expert(
     kind: str,
-    dim: int,
     expert_dim: int,
     num_heads: int,
     window: int,
     small_window: int,
     neuron_cfg: dict[str, Any] | None,
 ) -> nn.Module:
-    """Factory mapping expert-type string → expert module."""
+    """Factory mapping expert-type string → expert module (D_e-space)."""
     k = kind.lower()
     if k == "swa":
-        return _SWAExpert(dim, expert_dim, num_heads, window, neuron_cfg)
+        return _SWAExpert(expert_dim, num_heads, window, neuron_cfg)
     if k == "swa_local":
-        return _SWAExpert(dim, expert_dim, num_heads, small_window, neuron_cfg)
+        return _SWAExpert(expert_dim, num_heads, small_window, neuron_cfg)
     if k == "lra":
-        return _LRAExpert(dim, expert_dim, num_heads, neuron_cfg)
+        return _LRAExpert(expert_dim, num_heads, neuron_cfg)
     if k == "identity":
-        return _IdentityExpert(dim, expert_dim, neuron_cfg)
+        return _IdentityExpert(expert_dim, neuron_cfg)
     raise ValueError(f"Unknown expert kind {kind!r}. Supported: swa, swa_local, lra, identity")
 
 
@@ -240,17 +226,24 @@ class SeMoEBlock(nn.Module):
         self.expert_dim = expert_dim
         self.load_balance_weight = float(load_balance_weight)
 
-        # Spike-driven gate: depthwise temporal conv → LIF → linear-to-K
+        # Spike-driven gate: depthwise temporal conv → LIF → linear-to-K.
+        # Reads from D-dim input (full spike features) for routing precision.
         self.gate_conv = nn.Conv1d(dim, dim, kernel_size=3, padding=1, groups=dim, bias=False)
         self.gate_bn = layer.BatchNorm1d(dim, step_mode="m") if use_bn else nn.Identity()
         self.gate_lif = make_lif(neuron_cfg)
         self.gate_linear = nn.Linear(dim, self.K, bias=True)
 
-        # Experts
+        # Shared input projection D → D_e: every expert reads the same compressed
+        # spike features. Per-expert qkv_conv now operates in D_e space (D_e × 3*D_e
+        # ≈ 12K params), keeping the K-expert sum within the spec param budget.
+        self.input_proj = nn.Conv1d(dim, expert_dim, kernel_size=1, bias=False)
+        self.input_bn = layer.BatchNorm1d(expert_dim, step_mode="m") if use_bn else nn.Identity()
+        self.input_lif = make_lif(neuron_cfg)
+
+        # Experts (all in D_e space)
         self.experts = nn.ModuleList([
             _build_expert(
                 kind=expert_types[k],
-                dim=dim,
                 expert_dim=expert_dim,
                 num_heads=num_heads,
                 window=attention_window,
@@ -322,8 +315,14 @@ class SeMoEBlock(nn.Module):
             soft = soft * mt
             hard = hard * mt
 
+        # Shared input projection D → D_e (one conv, BN, LIF — fed to every expert)
+        x_bdt = x.permute(1, 2, 0).contiguous()
+        x_e = self.input_proj(x_bdt).permute(2, 0, 1).contiguous()
+        x_e = self.input_bn(x_e.unsqueeze(-1)).squeeze(-1)
+        x_e = self.input_lif(x_e)
+
         # Experts (PyTorch eager runs all; routing materialises at masked sum)
-        outs = torch.stack([expert(x) for expert in self.experts], dim=-1)
+        outs = torch.stack([expert(x_e) for expert in self.experts], dim=-1)
         # outs: (T, B, D_e, K)
         routed = (outs * mask.unsqueeze(-2)).sum(dim=-1)      # (T, B, D_e)
 
