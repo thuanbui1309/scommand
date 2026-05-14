@@ -144,8 +144,8 @@ def make_lif(neuron_cfg: dict[str, Any] | None = None, **overrides: Any) -> nn.M
     cfg.update(overrides)
 
     if neuron_type == "plif":
-        # Lazy import to avoid hard dep on plif.py at lif.py import time.
         from scommander.modules.plif import PLIFNode
-        plif_kwargs = {**cfg, "init_tau": cfg.pop("tau")}
+        plif_kwargs = {k: v for k, v in cfg.items() if k != "tau"}
+        plif_kwargs["init_tau"] = cfg["tau"]
         return PLIFNode(**plif_kwargs)
     return LIFNode(**cfg)
