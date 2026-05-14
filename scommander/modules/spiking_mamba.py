@@ -35,6 +35,48 @@ except ImportError:
     _MAMBA_AVAILABLE = False
 
 
+@register("long_range_branch", "spiking_mamba_lite")
+class SpikingMambaLite(nn.Module):
+    """Lighter Spiking Mamba: d_state=8, expand=1 (cuts SSM params ~50%).
+
+    Subclassed in spirit from SpikingMambaBranch but with smaller defaults
+    to test the param/FR tradeoff curve.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int,
+        d_state: int = 8,
+        d_conv: int = 4,
+        expand: int = 1,
+        gate_init_bias: float = -3.0,
+        neuron_cfg: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__()
+        if not _MAMBA_AVAILABLE:
+            raise ImportError("mamba_ssm required")
+        assert dim % num_heads == 0
+        self.dim, self.num_heads = dim, num_heads
+        self.dh = dim // num_heads
+        self.mamba = Mamba(d_model=dim, d_state=d_state, d_conv=d_conv, expand=expand)
+        self.gate_proj = nn.Linear(dim, dim)
+        nn.init.zeros_(self.gate_proj.weight)
+        nn.init.constant_(self.gate_proj.bias, gate_init_bias)
+        self.lif = make_lif(neuron_cfg)
+
+    def forward(self, q, k, v, global_scale):
+        T, B, H, Dh = v.shape
+        D = H * Dh
+        h = v.permute(1, 0, 2, 3).reshape(B, T, D).contiguous().float()
+        ssm = self.mamba(h)
+        gate = torch.sigmoid(self.gate_proj(h))
+        fused = gate * ssm + (1.0 - gate) * h
+        fused_tbd = fused.permute(1, 0, 2).contiguous()
+        spike = self.lif(fused_tbd)
+        return spike.view(T, B, H, Dh)
+
+
 @register("long_range_branch", "spiking_mamba")
 class SpikingMambaBranch(nn.Module):
     """Mamba-Spike soft-gated SSM branch.

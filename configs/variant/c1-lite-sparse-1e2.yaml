@@ -1,0 +1,12 @@
+# Lite Mamba + tighter sparsity (lam=1e-2). Aims: lower params than full Mamba + bigger FR drop.
+model:
+  long_range_branch: spiking_mamba_lite
+
+loss:
+  sparsity:
+    enabled: true
+    lam: 1.0e-2
+    target_fr: null
+
+training:
+  grad_clip: 1.0

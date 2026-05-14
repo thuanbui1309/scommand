@@ -1,0 +1,6 @@
+# Phase 05 C1 lite: Spiking Mamba with d_state=8, expand=1 (cuts SSM params ~50%).
+model:
+  long_range_branch: spiking_mamba_lite
+
+training:
+  grad_clip: 1.0

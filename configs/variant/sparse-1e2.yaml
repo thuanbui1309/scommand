@@ -1,0 +1,5 @@
+loss:
+  sparsity:
+    enabled: true
+    lam: 1.0e-2
+    target_fr: null
