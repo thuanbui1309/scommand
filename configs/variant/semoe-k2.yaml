@@ -1,0 +1,12 @@
+# SeMoE K=2 fallback — pivot here if K=4 gate collapses to one expert.
+# Minimum-viable mix: SWA (workhorse) + identity (silent-frame fallback).
+
+model:
+  attention: semoe
+  semoe:
+    num_experts: 2
+    expert_types: [swa, identity]
+    load_balance_weight: 0.01
+
+training:
+  grad_clip: 1.0

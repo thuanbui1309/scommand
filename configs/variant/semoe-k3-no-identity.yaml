@@ -1,0 +1,13 @@
+# SeMoE K=3 retrain — use after Phase 05 pruning if identity expert is dead.
+# Drops the identity slot and retrains the 3 attention-style experts from
+# scratch so the gate redistributes mass without an unused option.
+
+model:
+  attention: semoe
+  semoe:
+    num_experts: 3
+    expert_types: [swa, lra, swa_local]
+    load_balance_weight: 0.01
+
+training:
+  grad_clip: 1.0
