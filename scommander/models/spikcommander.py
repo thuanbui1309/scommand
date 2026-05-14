@@ -76,12 +76,15 @@ class SpikCommander(nn.Module):
         window_radius: int = 20,
         expansion: float = 4.0,
         long_range_branch_name: str = "lra",
+        attention_name: str = "stasa",
+        attention_kwargs: dict[str, Any] | None = None,
         neuron_cfg: dict[str, Any] | None = None,
         dropout_rate: float = 0.0,
     ) -> None:
         super().__init__()
         self.dim = dim
         self.depth = depth
+        self.attention_name = attention_name
 
         # SEE encoder: (B, T, F_raw) → (T, B, D)
         self.see = resolve("encoder", "see")(
@@ -102,18 +105,20 @@ class SpikCommander(nn.Module):
 
             return factory
 
-        # L blocks of (STASA + SCR-MLP)
-        stasa_cls = resolve("attention", "stasa")
+        # L blocks of (attention + SCR-MLP). attention_name selects STASA / SeMoE / future.
+        attn_cls = resolve("attention", attention_name)
         mlp_cls = resolve("mlp", "scr_mlp")
+        attn_extra: dict[str, Any] = dict(attention_kwargs or {})
         self.blocks = nn.ModuleList([
             _Block(
-                attn=stasa_cls(
+                attn=attn_cls(
                     dim=dim,
                     num_heads=n_heads,
                     attention_window=window_radius,
                     long_range_branch_factory=_make_lra_factory(),
                     neuron_cfg=neuron_cfg,
                     dropout_rate=dropout_rate,
+                    **attn_extra,
                 ),
                 mlp=mlp_cls(
                     in_features=dim,

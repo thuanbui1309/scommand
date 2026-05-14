@@ -9,10 +9,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from scommander.modules.lif import LIFNode
-from scommander.modules.plif import PLIFNode
 
 
-_NEURON_TYPES = (LIFNode, PLIFNode)
+# PLIFNode dropped during 2026-05-15 SeMoE pivot; LIF is the only
+# spiking neuron the FR collector needs to hook.
+_NEURON_TYPES = (LIFNode,)
 
 
 class FiringRateCollector:

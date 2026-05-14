@@ -1,0 +1,17 @@
+# SeMoE Phase 05 hero variant — K=4 spike-routed experts replacing STASA.
+#
+# Spec: plans/reports/spec-260515-0245-semoe-design.md
+# Decision gate (SHD seed 0): acc >= 93% + per-expert usage shows >=2 experts
+# active. Below that we revert to K=2 (swa + identity) before further tuning.
+
+model:
+  attention: semoe
+  semoe:
+    num_experts: 4
+    expert_types: [swa, lra, swa_local, identity]
+    small_window: 5
+    load_balance_weight: 0.01
+    # expert_dim: null  # falls back to dim // 2 (D_e = 64 on SHD)
+
+training:
+  grad_clip: 1.0   # MoE gate is unstable without clipping

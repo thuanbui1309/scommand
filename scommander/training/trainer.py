@@ -42,6 +42,7 @@ from scommander.augmentations.spec_aug import SpecAugment
 from scommander.datasets import padded_sequence_mask
 from scommander.losses.ce import SumSoftmaxCE, accuracy_from_logits
 from scommander.losses.sparsity import FiringRateCollector, FiringRatePenalty
+from scommander.modules.semoe import collect_semoe_aux_loss
 
 
 def train(
@@ -146,6 +147,9 @@ def train(
             else:
                 logits = model(x, attn_mask)
                 loss = loss_fn(logits, y_onehot)
+
+            # SeMoE load-balance aux loss (no-op when no SeMoEBlock present)
+            loss = loss + collect_semoe_aux_loss(model)
 
             loss.backward()
             if grad_clip_val is not None and grad_clip_val > 0:

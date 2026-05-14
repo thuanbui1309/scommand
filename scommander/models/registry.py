@@ -107,6 +107,23 @@ def build_model(cfg: Any) -> nn.Module:
     # Long-range branch selector (Track C swap point)
     long_range_name = _cfg_get("model.long_range_branch", "lra")
 
+    # Attention slot: 'stasa' (default) or 'semoe' (Phase 05). Extra kwargs are
+    # forwarded only when the chosen attention class consumes them.
+    attention_name = _cfg_get("model.attention", "stasa")
+    attention_kwargs: Dict[str, Any] = {}
+    if attention_name == "semoe":
+        # All entries optional; SeMoEBlock falls back to spec defaults if missing.
+        for key in ("num_experts", "expert_types", "small_window",
+                    "load_balance_weight", "expert_dim"):
+            val = _cfg_get(f"model.semoe.{key}", None)
+            if val is not None:
+                # OmegaConf ListConfig → plain list for clean repr/debug
+                if hasattr(val, "to_container"):
+                    val = val.to_container()
+                elif key == "expert_types" and not isinstance(val, list):
+                    val = list(val)
+                attention_kwargs[key] = val
+
     model_cls = resolve("model", arch)
     return model_cls(
         in_features=defaults["in_features"],
@@ -117,6 +134,8 @@ def build_model(cfg: Any) -> nn.Module:
         window_radius=window_radius,
         expansion=expansion,
         long_range_branch_name=long_range_name,
+        attention_name=attention_name,
+        attention_kwargs=attention_kwargs,
         neuron_cfg=neuron_cfg,
         dropout_rate=dropout_rate,
     )
