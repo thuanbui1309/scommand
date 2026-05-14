@@ -1,9 +1,0 @@
-# Phase 05 C3: self-distillation with EMA teacher.
-loss:
-  kd:
-    enabled: true
-    teacher: ema
-    logit_kl_weight: 1.0
-    temperature: 4.0
-    warmup_epochs: 10
-    ema_decay: 0.999

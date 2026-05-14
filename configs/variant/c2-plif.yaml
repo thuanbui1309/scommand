@@ -1,3 +1,0 @@
-# Phase 05 C2: learnable membrane tau (PLIF).
-neuron:
-  type: plif

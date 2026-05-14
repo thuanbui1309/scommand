@@ -1,8 +1,0 @@
-# Phase 05 C3 no-KD control: same KD loss path but weight 0; validates self-KD value.
-loss:
-  kd:
-    enabled: true
-    teacher: none
-    logit_kl_weight: 0.0
-    temperature: 4.0
-    warmup_epochs: 10

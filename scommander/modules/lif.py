@@ -109,17 +109,8 @@ class LIFNode(nn.Module):
         )
 
 
-def make_lif(neuron_cfg: dict[str, Any] | None = None, **overrides: Any) -> nn.Module:
-    """Factory: build a LIF-family neuron from a config dict.
-
-    Dispatches by ``neuron_cfg["type"]``:
-      - ``'lif'`` (default) → ``LIFNode`` with fixed ``tau``.
-      - ``'plif'``           → ``PLIFNode`` with learnable ``init_tau``.
-
-    All other keys (tau, v_threshold, v_reset, surrogate, alpha, backend) are
-    passed through unchanged; ``tau`` is forwarded as ``init_tau`` for PLIF.
-    Overrides win over neuron_cfg entries.
-    """
+def make_lif(neuron_cfg: dict[str, Any] | None = None, **overrides: Any) -> LIFNode:
+    """Factory: build LIFNode from a config dict; overrides win over cfg entries."""
     cfg: dict[str, Any] = {
         "tau": 2.0,
         "v_threshold": 1.0,
@@ -128,24 +119,14 @@ def make_lif(neuron_cfg: dict[str, Any] | None = None, **overrides: Any) -> nn.M
         "alpha": 5.0,
         "backend": "cupy",
     }
-    neuron_type = "lif"
     if neuron_cfg:
-        neuron_type = str(neuron_cfg.get("type", "lif")).lower()
-        # Map the build_model keyspace (surrogate → surrogate_function) onto kwargs.
-        mapped = {
+        cfg.update({
             "tau": neuron_cfg.get("tau", cfg["tau"]),
             "v_threshold": neuron_cfg.get("v_threshold", cfg["v_threshold"]),
             "v_reset": neuron_cfg.get("v_reset", cfg["v_reset"]),
             "surrogate_function": neuron_cfg.get("surrogate", cfg["surrogate_function"]),
             "alpha": neuron_cfg.get("alpha", cfg["alpha"]),
             "backend": neuron_cfg.get("backend", cfg["backend"]),
-        }
-        cfg.update(mapped)
+        })
     cfg.update(overrides)
-
-    if neuron_type == "plif":
-        from scommander.modules.plif import PLIFNode
-        plif_kwargs = {k: v for k, v in cfg.items() if k != "tau"}
-        plif_kwargs["init_tau"] = cfg["tau"]
-        return PLIFNode(**plif_kwargs)
     return LIFNode(**cfg)

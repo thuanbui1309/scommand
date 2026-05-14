@@ -29,7 +29,6 @@ model:
   window_radius: 20  # SWA-STASA w; scales with T (w = round(T*0.2))
 
 neuron:
-  type: lif          # lif | plif (adaptive)
   tau: 2.0
   v_threshold: 1.0
   v_reset: 0.5
@@ -65,11 +64,3 @@ loss:
     enabled: false
     lam: 1.0e-3                # sweep 1e-4 → 1e-2; per-dataset calibration in Phase 07
     target_fr: null            # null = mean penalty; float = hinge mode (penalize FR > target)
-  kd:
-    enabled: false
-    teacher: ema                # ema (self-KD, SHD/SSC) | none (no-KD control) | ast (GSC, Phase 05 C3 later)
-    logit_kl_weight: 1.0
-    feature_align_weight: 0.5
-    temperature: 4.0
-    warmup_epochs: 10           # KD starts after this many epochs (per phase-05 risk mitigation)
-    ema_decay: 0.999

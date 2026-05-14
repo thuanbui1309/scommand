@@ -1,9 +1,0 @@
-# Phase 05 C1 + C2: Spiking Mamba + learnable tau (PLIF).
-model:
-  long_range_branch: spiking_mamba
-
-neuron:
-  type: plif
-
-training:
-  grad_clip: 1.0
