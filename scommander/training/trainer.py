@@ -41,7 +41,9 @@ from tqdm import tqdm
 from scommander.augmentations.spec_aug import SpecAugment
 from scommander.datasets import padded_sequence_mask
 from scommander.losses.ce import SumSoftmaxCE, accuracy_from_logits
+from scommander.losses.kd import LogitKDLoss
 from scommander.losses.sparsity import FiringRateCollector, FiringRatePenalty
+from scommander.training.ema_teacher import EmaTeacher
 
 
 def train(
@@ -106,6 +108,24 @@ def train(
             target_fr=float(sparsity_cfg.target_fr) if sparsity_cfg.get("target_fr") else None,
         ).to(device)
 
+    kd_cfg = cfg.loss.get("kd", None) if hasattr(cfg, "loss") else None
+    kd_enabled = bool(kd_cfg.enabled) if kd_cfg is not None else False
+    kd_teacher_kind = str(kd_cfg.teacher) if kd_enabled else None
+    kd_warmup = int(kd_cfg.get("warmup_epochs", 10)) if kd_enabled else 0
+    kd_loss_fn: Optional[LogitKDLoss] = None
+    teacher: Optional[EmaTeacher] = None
+    if kd_enabled:
+        kd_loss_fn = LogitKDLoss(
+            weight=float(kd_cfg.logit_kl_weight),
+            temperature=float(kd_cfg.temperature),
+        ).to(device)
+        if kd_teacher_kind == "ema":
+            teacher = EmaTeacher(model, decay=float(kd_cfg.get("ema_decay", 0.999))).to(device)
+        elif kd_teacher_kind == "none":
+            teacher = None
+        else:
+            raise ValueError(f"Unsupported kd.teacher={kd_teacher_kind!r}; expected 'ema' or 'none'")
+
     best_acc_val = 0.0
     best_loss_val = float("inf")
     epoch_records = []
@@ -147,10 +167,20 @@ def train(
                 logits = model(x, attn_mask)
                 loss = loss_fn(logits, y_onehot)
 
+            if teacher is not None and epoch >= kd_warmup:
+                with torch.no_grad():
+                    teacher.reset()
+                    teacher_logits = teacher(x, attn_mask)
+                    teacher.reset()
+                loss = loss + kd_loss_fn(logits, teacher_logits)
+
             loss.backward()
             if grad_clip_val is not None and grad_clip_val > 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_val)
             optimizer.step()
+
+            if teacher is not None:
+                teacher.update(model)
 
             acc = accuracy_from_logits(logits.detach(), y_onehot)
             loss_batch.append(loss.detach().cpu().item())

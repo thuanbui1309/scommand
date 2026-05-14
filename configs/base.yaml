@@ -67,7 +67,9 @@ loss:
     target_fr: null            # null = mean penalty; float = hinge mode (penalize FR > target)
   kd:
     enabled: false
-    teacher: null               # ast (GSC) | ema (SHD/SSC)
+    teacher: ema                # ema (self-KD, SHD/SSC) | none (no-KD control) | ast (GSC, Phase 05 C3 later)
     logit_kl_weight: 1.0
     feature_align_weight: 0.5
     temperature: 4.0
+    warmup_epochs: 10           # KD starts after this many epochs (per phase-05 risk mitigation)
+    ema_decay: 0.999

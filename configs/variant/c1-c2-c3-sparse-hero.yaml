@@ -1,0 +1,22 @@
+# Track C full + sparsity hero: C1 Mamba + C2 PLIF + C3 self-KD + Phase 06 sparsity.
+model:
+  long_range_branch: spiking_mamba
+
+neuron:
+  type: plif
+
+loss:
+  sparsity:
+    enabled: true
+    lam: 1.0e-3
+    target_fr: null
+  kd:
+    enabled: true
+    teacher: ema
+    logit_kl_weight: 1.0
+    temperature: 4.0
+    warmup_epochs: 10
+    ema_decay: 0.999
+
+training:
+  grad_clip: 1.0
