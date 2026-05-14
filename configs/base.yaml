@@ -63,8 +63,8 @@ loss:
     enabled: true
   sparsity:
     enabled: false
-    lambda: 1.0e-3             # sweep 1e-4 → 1e-2; per-dataset calibration in Phase 07
-    target_fr: 0.10             # 10 Hz-equivalent, normalized
+    lam: 1.0e-3                # sweep 1e-4 → 1e-2; per-dataset calibration in Phase 07
+    target_fr: null            # null = mean penalty; float = hinge mode (penalize FR > target)
   kd:
     enabled: false
     teacher: null               # ast (GSC) | ema (SHD/SSC)

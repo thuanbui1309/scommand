@@ -93,8 +93,8 @@ def build_model(cfg: Any) -> nn.Module:
     expansion = _cfg_get("model.expansion", 4.0)
     arch = _cfg_get("model.arch", "spikcommander")
 
-    # Neuron config (passed to every LIF call-site)
     neuron_cfg: Dict[str, Any] = {
+        "type": _cfg_get("neuron.type", "lif"),
         "tau": _cfg_get("neuron.tau", 2.0),
         "v_threshold": _cfg_get("neuron.v_threshold", 1.0),
         "v_reset": _cfg_get("neuron.v_reset", 0.5),

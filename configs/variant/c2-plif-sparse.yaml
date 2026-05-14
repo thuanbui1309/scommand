@@ -1,0 +1,9 @@
+# Phase 05 C2 + Phase 06: PLIF + sparsity regularizer (lambda=1e-3).
+neuron:
+  type: plif
+
+loss:
+  sparsity:
+    enabled: true
+    lam: 1.0e-3
+    target_fr: null

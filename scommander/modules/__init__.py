@@ -7,6 +7,7 @@ modules not imported here will be absent from the REGISTRY.
 from scommander.modules.aggregator import SumAggregator
 from scommander.modules.classifier import ClassifierHead
 from scommander.modules.lif import LIFNode, make_lif
+from scommander.modules.plif import PLIFNode
 from scommander.modules.scr_mlp import SCRMLP
 from scommander.modules.see import SEE
 from scommander.modules.stasa import LRABranch, STASA
@@ -15,6 +16,7 @@ __all__ = [
     "ClassifierHead",
     "LIFNode",
     "LRABranch",
+    "PLIFNode",
     "SCRMLP",
     "SEE",
     "STASA",

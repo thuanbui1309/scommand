@@ -42,6 +42,7 @@ from tqdm import tqdm
 from scommander.augmentations.spec_aug import SpecAugment
 from scommander.datasets import padded_sequence_mask
 from scommander.losses.ce import SumSoftmaxCE, accuracy_from_logits
+from scommander.losses.sparsity import FiringRateCollector, FiringRatePenalty
 
 
 def train(
@@ -95,6 +96,15 @@ def train(
 
     loss_fn = SumSoftmaxCE()
 
+    sparsity_cfg = cfg.loss.get("sparsity", None) if hasattr(cfg, "loss") else None
+    sparsity_enabled = bool(sparsity_cfg.enabled) if sparsity_cfg is not None else False
+    fr_penalty: Optional[FiringRatePenalty] = None
+    if sparsity_enabled:
+        fr_penalty = FiringRatePenalty(
+            lam=float(sparsity_cfg.lam),
+            target_fr=float(sparsity_cfg.target_fr) if sparsity_cfg.get("target_fr") else None,
+        ).to(device)
+
     best_acc_val = 0.0
     best_loss_val = float("inf")
     epoch_records = []
@@ -125,8 +135,17 @@ def train(
                 x = spec_aug(x, x_len_dev)
 
             optimizer.zero_grad()
-            logits = model(x, attn_mask)             # (T, B, C)
-            loss = loss_fn(logits, y_onehot)
+
+            if fr_penalty is not None:
+                with FiringRateCollector(model) as fr_ctx:
+                    logits = model(x, attn_mask)
+                ce = loss_fn(logits, y_onehot)
+                reg = fr_penalty(fr_ctx.spike_rates)
+                loss = ce + reg
+            else:
+                logits = model(x, attn_mask)
+                loss = loss_fn(logits, y_onehot)
+
             loss.backward()
             optimizer.step()
 
@@ -134,7 +153,6 @@ def train(
             loss_batch.append(loss.detach().cpu().item())
             acc_batch.append(acc)
 
-            # Reset LIF membrane state between independent sequences
             model.reset()
 
         loss_train = float(np.mean(loss_batch))

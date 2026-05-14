@@ -1,0 +1,6 @@
+# Phase 06: firing-rate sparsity regularizer, lambda=1e-3.
+loss:
+  sparsity:
+    enabled: true
+    lam: 1.0e-3
+    target_fr: null
