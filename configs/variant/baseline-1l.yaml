@@ -1,0 +1,4 @@
+# STASA baseline at depth=1 — overrides dataset's default depth=2 for SSC/GSC.
+# Use to reproduce paper Table 1 "(1L-16-256)" rows for SSC + GSC.
+model:
+  depth: 1
