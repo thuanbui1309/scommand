@@ -26,10 +26,33 @@ from tqdm import tqdm
 from scommander.datasets import make_loaders, padded_sequence_mask
 from scommander.losses.sparsity import FiringRateCollector
 from scommander.models.registry import build_model
+from scommander.modules.lif import LIFNode
+from scommander.modules.semoe import SeMoEBlock, collect_semoe_expert_usage
 from scommander.utils.seed import set_seed
 
 
 _N_CLASSES = {"shd": 20, "ssc": 35, "gsc": 35}
+
+
+def _build_routing_map(model: torch.nn.Module) -> dict[str, tuple[str, int]]:
+    """Return {full_layer_name: (semoe_block_name, expert_idx)} for every LIF
+    layer that lives inside a SeMoE expert. Layers outside any SeMoE block
+    (gate, input/out projections, MLP, SEE) are absent — they always count
+    fully toward effective FR.
+    """
+    out: dict[str, tuple[str, int]] = {}
+    for block_name, block in model.named_modules():
+        if not isinstance(block, SeMoEBlock):
+            continue
+        for expert_idx, expert in enumerate(block.experts):
+            for sub_name, sub in expert.named_modules():
+                if not isinstance(sub, LIFNode):
+                    continue
+                # Reconstruct name as it appears in named_modules() at model level
+                expert_path = f"{block_name}.experts.{expert_idx}"
+                full = f"{expert_path}.{sub_name}" if sub_name else expert_path
+                out[full] = (block_name, expert_idx)
+    return out
 
 
 def _parse_args():
@@ -66,8 +89,12 @@ def main() -> None:
         _, val_loader, test_loader = loaders
         loader = test_loader if args.split == "test" else val_loader
 
+    routing_map = _build_routing_map(model)
+
     all_preds, all_targets = [], []
     fr_layer_accumulator: dict[str, list[float]] = {}
+    usage_acc: dict[str, torch.Tensor] = {}
+    n_batches = 0
 
     with torch.no_grad():
         for x, y, x_len in tqdm(loader, desc=f"{args.variant or 'eval'}", leave=False):
@@ -80,6 +107,13 @@ def main() -> None:
             for name, rate in fr.spike_rates.items():
                 fr_layer_accumulator.setdefault(name, []).append(rate.item())
 
+            # Per-block expert usage (no-op when no SeMoE block present)
+            for bname, vec in collect_semoe_expert_usage(model).items():
+                if bname not in usage_acc:
+                    usage_acc[bname] = torch.zeros_like(vec)
+                usage_acc[bname] += vec
+            n_batches += 1
+
             m = torch.sum(F.softmax(logits, dim=-1), dim=0)
             preds = m.argmax(dim=-1).cpu()
             all_preds.append(preds)
@@ -91,16 +125,41 @@ def main() -> None:
     acc = (all_preds == all_targets).float().mean().item()
 
     layer_fr = {k: float(np.mean(v)) for k, v in fr_layer_accumulator.items()}
-    mean_fr = float(np.mean(list(layer_fr.values()))) if layer_fr else 0.0
+    raw_mean_fr = float(np.mean(list(layer_fr.values()))) if layer_fr else 0.0
+
+    # Routing-aware effective FR: weight each expert layer by its block's
+    # mean usage probability. Non-routed layers count fully. Without SeMoE
+    # blocks this is identical to raw_mean_fr.
+    mean_usage = {bn: (vec / max(n_batches, 1)).cpu().tolist() for bn, vec in usage_acc.items()}
+    effective_layer_fr: dict[str, float] = {}
+    for name, fr in layer_fr.items():
+        if name in routing_map:
+            bn, eidx = routing_map[name]
+            u = mean_usage.get(bn, [1.0] * (eidx + 1))[eidx]
+            effective_layer_fr[name] = fr * u
+        else:
+            effective_layer_fr[name] = fr
+    effective_mean_fr = float(np.mean(list(effective_layer_fr.values()))) if effective_layer_fr else 0.0
 
     label = args.variant or os.path.basename(os.path.dirname(args.checkpoint))
-    print(f"variant,acc,params,mean_fr,n_layers")
-    print(f"{label},{100*acc:.2f},{n_params},{mean_fr:.4f},{len(layer_fr)}")
+    print(f"variant,acc,params,raw_mean_fr,effective_mean_fr,n_layers")
+    print(f"{label},{100*acc:.2f},{n_params},{raw_mean_fr:.4f},{effective_mean_fr:.4f},{len(layer_fr)}")
 
-    # Per-layer FR breakdown
-    print("\n# Per-layer FR:")
-    for name, rate in sorted(layer_fr.items()):
-        print(f"#   {name}: {rate:.4f}")
+    if mean_usage:
+        print("\n# Mean expert usage (routing fractions):")
+        for bn, vec in sorted(mean_usage.items()):
+            print(f"#   {bn}: {[f'{u:.3f}' for u in vec]}")
+
+    # Per-layer FR breakdown (raw, with routing factor inline when applicable)
+    print("\n# Per-layer FR (raw  /  effective when routed):")
+    for name in sorted(layer_fr):
+        raw = layer_fr[name]
+        eff = effective_layer_fr[name]
+        if name in routing_map:
+            bn, eidx = routing_map[name]
+            print(f"#   {name}: {raw:.4f}  /  {eff:.4f}  (×u_{eidx}={mean_usage[bn][eidx]:.3f})")
+        else:
+            print(f"#   {name}: {raw:.4f}")
 
 
 if __name__ == "__main__":
