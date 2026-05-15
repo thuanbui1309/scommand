@@ -1,0 +1,11 @@
+# SeMoE K=4, very strong load-balance λ=0.1 — maximum gate balance pressure.
+# Tests upper bound — likely hurts acc by overconstraining specialization.
+model:
+  attention: semoe
+  semoe:
+    num_experts: 4
+    expert_types: [swa, lra, swa_local, identity]
+    small_window: 5
+    load_balance_weight: 0.1
+training:
+  grad_clip: 1.0

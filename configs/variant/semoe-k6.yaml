@@ -1,0 +1,11 @@
+# SeMoE K=6 — capacity ablation. Adds 1 extra SWA + 1 extra LRA slot to test
+# whether more experts help (gate spreads thinner) vs hurt (capacity wasted).
+model:
+  attention: semoe
+  semoe:
+    num_experts: 6
+    expert_types: [swa, lra, swa_local, identity, swa, lra]
+    small_window: 5
+    load_balance_weight: 0.01
+training:
+  grad_clip: 1.0

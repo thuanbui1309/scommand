@@ -1,0 +1,11 @@
+# SeMoE K=4, weak load-balance λ=0.001 — encourage gate collapse to 2 experts
+# for consistent prune target ~150K params (-21% vs baseline).
+model:
+  attention: semoe
+  semoe:
+    num_experts: 4
+    expert_types: [swa, lra, swa_local, identity]
+    small_window: 5
+    load_balance_weight: 0.001
+training:
+  grad_clip: 1.0

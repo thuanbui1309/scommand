@@ -1,0 +1,11 @@
+# SeMoE K=4, strong load-balance λ=0.05 — force uniform expert usage,
+# all 4 experts stay alive (no prune possible) but stable sparse routing.
+model:
+  attention: semoe
+  semoe:
+    num_experts: 4
+    expert_types: [swa, lra, swa_local, identity]
+    small_window: 5
+    load_balance_weight: 0.05
+training:
+  grad_clip: 1.0

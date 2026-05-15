@@ -1,0 +1,11 @@
+# SeMoE K=4 with load-balance loss DISABLED (λ=0).
+# Validates necessity of LB loss — expect full collapse to 1 expert + acc drop.
+model:
+  attention: semoe
+  semoe:
+    num_experts: 4
+    expert_types: [swa, lra, swa_local, identity]
+    small_window: 5
+    load_balance_weight: 0.0
+training:
+  grad_clip: 1.0

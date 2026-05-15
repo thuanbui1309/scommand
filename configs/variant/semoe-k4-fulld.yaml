@@ -1,0 +1,13 @@
+# SeMoE K=4 with expert_dim = D (no compression). Each expert operates at
+# full D=128 (SHD) / 256 (SSC/GSC). Tests whether D_e=D//2 was a bottleneck.
+# Trade: ~+30K params on SHD vs default semoe-k4.yaml.
+model:
+  attention: semoe
+  semoe:
+    num_experts: 4
+    expert_types: [swa, lra, swa_local, identity]
+    small_window: 5
+    load_balance_weight: 0.01
+    expert_dim: 128         # SHD-specific (D); for SSC/GSC use 256
+training:
+  grad_clip: 1.0
