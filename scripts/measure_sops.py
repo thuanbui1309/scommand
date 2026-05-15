@@ -90,7 +90,7 @@ def _flops_for(layer: nn.Module, output_shape: torch.Size, batch_size: int) -> i
         K = layer.kernel_size[0]
         per_step = Cin * Cout * K * L
         # Account for any extra leading dim beyond batch (e.g. T in step_mode='m')
-        leading = int(np.prod(output_shape[:-2])) if output_shape.ndim > 2 else 1
+        leading = int(np.prod(output_shape[:-2])) if len(output_shape) > 2 else 1
         return per_step * leading // batch_size
     if isinstance(layer, nn.Conv2d):
         H, W = output_shape[-2], output_shape[-1]
@@ -98,7 +98,7 @@ def _flops_for(layer: nn.Module, output_shape: torch.Size, batch_size: int) -> i
         Cout = layer.out_channels
         Kh, Kw = layer.kernel_size
         per_step = Cin * Cout * Kh * Kw * H * W
-        leading = int(np.prod(output_shape[:-3])) if output_shape.ndim > 3 else 1
+        leading = int(np.prod(output_shape[:-3])) if len(output_shape) > 3 else 1
         return per_step * leading // batch_size
     if isinstance(layer, nn.Linear):
         # output_shape: (..., out_features); per-sample FLOPs = product(spatial dims) × in × out
