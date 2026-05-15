@@ -21,16 +21,11 @@ log() {
 }
 
 # tag                 dataset  seed  config                                     min_vram_mib
+# Trimmed 2026-05-15: dropped lb1e3, lb5e2, lb1e1 (LB strength sweep). Keep
+# no-lb only as the LB necessity ablation (extreme λ=0 vs default λ=0.01).
+# Five SeMoE-specific ablations remain: K sweep (K2, K6) + K3-noid (identity
+# expert role) + no-lb (LB necessity) + fulld (D_e choice).
 QUEUE=$(cat <<'EOF'
-shd-k4-lb1e3   shd  0  configs/variant/semoe-k4-lb1e3.yaml      4000
-shd-k4-lb1e3   shd  1  configs/variant/semoe-k4-lb1e3.yaml      4000
-shd-k4-lb1e3   shd  2  configs/variant/semoe-k4-lb1e3.yaml      4000
-shd-k4-lb5e2   shd  0  configs/variant/semoe-k4-lb5e2.yaml      4000
-shd-k4-lb5e2   shd  1  configs/variant/semoe-k4-lb5e2.yaml      4000
-shd-k4-lb5e2   shd  2  configs/variant/semoe-k4-lb5e2.yaml      4000
-shd-k4-lb1e1   shd  0  configs/variant/semoe-k4-lb1e1.yaml      4000
-shd-k4-lb1e1   shd  1  configs/variant/semoe-k4-lb1e1.yaml      4000
-shd-k4-lb1e1   shd  2  configs/variant/semoe-k4-lb1e1.yaml      4000
 shd-k4-no-lb   shd  0  configs/variant/semoe-k4-no-lb.yaml      4000
 shd-k4-no-lb   shd  1  configs/variant/semoe-k4-no-lb.yaml      4000
 shd-k4-no-lb   shd  2  configs/variant/semoe-k4-no-lb.yaml      4000
