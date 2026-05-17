@@ -179,10 +179,13 @@ class GSpeechCommands(Dataset):
 
         target = self.target_transform(label)
 
-        # Count valid (non-padding) time steps — matches reference line 452-456
-        mask = waveform.ne(-100.0)
-        valid_rows = mask.all(dim=1)
-        valid_T = int(valid_rows.sum().item())
+        # Reference (datasets.py:452-456) returns ``number = len(valid_rows)``
+        # — i.e. the total timestep count T, NOT the count of all-valid rows.
+        # GSC is fixed-length so every sample uses its full T (no real
+        # padding mask). Using .sum() here was a port bug: the f_max(14000) >
+        # Nyquist(4000) mel filters are always -100 dB, so .all(dim=1) is
+        # uniformly False and .sum() collapsed valid_T to 0.
+        valid_T = waveform.shape[0]
 
         return waveform, target, valid_T
 
