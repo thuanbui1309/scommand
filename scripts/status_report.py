@@ -32,8 +32,10 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="SeMoE experiment status report")
     p.add_argument("--runs-dir", default="runs", help="Root dir containing run subdirs (default: runs)")
     p.add_argument("--output", default=None, help="Write markdown report to this path (default: stdout)")
-    p.add_argument("--date-prefix", default="20260515",
-                   help="Restrict to run dirs with this date prefix in timestamp (default: 20260515)")
+    p.add_argument("--date-prefix", default="2026",
+                   help="Restrict to run dirs with this date prefix (default: 2026 = all "
+                        "2026 runs, so multi-day p5final runs at 20260518 show alongside "
+                        "20260515 SHD/SSC and 20260424 Phase-02 baselines)")
     return p.parse_args()
 
 
@@ -202,7 +204,9 @@ def _emit_markdown(records: list[dict], date_prefix: str) -> str:
 def main() -> None:
     args = _parse_args()
 
-    pattern = os.path.join(args.runs_dir, f"*_seed*_{args.date_prefix}_*")
+    # date_prefix is a prefix of the YYYYMMDD field; trailing * (not _*) so
+    # e.g. "2026" matches "..._20260518_011504" and "20260515" still works.
+    pattern = os.path.join(args.runs_dir, f"*_seed*_{args.date_prefix}*")
     run_dirs = sorted(glob.glob(pattern))
 
     records: list[dict] = []
