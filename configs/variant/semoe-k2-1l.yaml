@@ -1,0 +1,12 @@
+# SeMoE K=2 (SWA + identity) with depth=1 — 1L scaling variant of the K2
+# hero for SSC/GSC. Matches paper Table 1's "(1L-16-256)" row.
+model:
+  attention: semoe
+  depth: 1                # override SSC/GSC default depth=2
+  semoe:
+    num_experts: 2
+    expert_types: [swa, identity]
+    load_balance_weight: 0.01
+
+training:
+  grad_clip: 1.0
