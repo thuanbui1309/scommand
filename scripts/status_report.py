@@ -76,6 +76,24 @@ def _classify_run(run_dir: str) -> dict | None:
     seed = OmegaConf.select(cfg, "experiment.seed", default=-1)
     target_epochs = OmegaConf.select(cfg, "training.epochs", default=0)
 
+    # Variant signature — distinguishes SeMoE ablations that otherwise share
+    # (attn, dataset, depth). Reads the semoe sub-config.
+    if attn == "semoe":
+        K = OmegaConf.select(cfg, "model.semoe.num_experts", default=4)
+        lb = OmegaConf.select(cfg, "model.semoe.load_balance_weight", default=0.01)
+        etypes = OmegaConf.select(cfg, "model.semoe.expert_types", default=None)
+        edim = OmegaConf.select(cfg, "model.semoe.expert_dim", default=None)
+        if etypes is not None and hasattr(etypes, "__iter__"):
+            etypes = list(etypes)
+        sig = f"K{K}-lb{lb}"
+        if etypes and "identity" not in etypes:
+            sig += "-noid"
+        if edim is not None:
+            sig += "-fulld"
+        variant = sig
+    else:
+        variant = "baseline"
+
     last_epoch, best_val, last_val = _read_metrics(metrics_path)
 
     # Has best_acc.pt → at least one improving epoch
@@ -101,6 +119,7 @@ def _classify_run(run_dir: str) -> dict | None:
         "dataset": dataset,
         "depth": int(depth) if depth is not None else 1,
         "attn": attn,
+        "variant": variant,
         "seed": int(seed) if seed != -1 else -1,
         "target_epochs": int(target_epochs),
         "last_epoch": last_epoch,

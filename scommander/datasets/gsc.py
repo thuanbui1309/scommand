@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 import torchaudio
@@ -27,6 +28,33 @@ from torchaudio.transforms import Spectrogram, MelScale, AmplitudeToDB, Resample
 import torch.nn.functional as F
 
 from scommander.utils.seed import set_seed
+
+
+def _load_wav_no_torchcodec(path: str) -> torch.Tensor:
+    """Load a PCM wav → float32 tensor (channels, samples), matching the
+    shape/semantics of ``torchaudio.load``.
+
+    torchaudio ≥2.8 routes ``torchaudio.load`` through TorchCodec, which is an
+    extra dependency the server env lacks. GSC wavs are plain PCM, so we read
+    them directly with soundfile (preferred) or scipy (fallback) — no codec.
+    """
+    try:
+        import soundfile as sf
+        data, _sr = sf.read(path, dtype="float32")          # (samples,) or (samples, ch)
+    except Exception:
+        from scipy.io import wavfile
+        _sr, data = wavfile.read(path)
+        if data.dtype == np.int16:
+            data = data.astype(np.float32) / 32768.0
+        elif data.dtype == np.int32:
+            data = data.astype(np.float32) / 2147483648.0
+        else:
+            data = data.astype(np.float32)
+    if data.ndim == 1:
+        data = data[None, :]                                 # (1, samples)
+    else:
+        data = data.T                                        # (ch, samples)
+    return torch.from_numpy(np.ascontiguousarray(data))
 
 
 # 35-class label list copied verbatim from reference datasets.py:423
@@ -139,7 +167,11 @@ class GSpeechCommands(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, index: int):
-        waveform, _, label, _, _ = self.dataset[index]
+        # Avoid self.dataset[index] — its internal torchaudio.load routes to
+        # TorchCodec (missing dep). Read the wav ourselves from metadata.
+        relpath, _sr, label, _spk, _utt = self.dataset.get_metadata(index)
+        wav_path = os.path.join(self.dataset._archive, relpath)
+        waveform = _load_wav_no_torchcodec(wav_path)
 
         if self.transform is not None:
             # transform: (1, samples) -> (F, T) -> squeeze -> (T, F) via .t()
