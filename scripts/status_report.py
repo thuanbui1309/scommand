@@ -137,11 +137,11 @@ def _format_pct(v: float | None) -> str:
 
 
 def _emit_markdown(records: list[dict], date_prefix: str) -> str:
-    """Group records by (attn, dataset, depth) then by status; emit markdown."""
-    # Group: (attn, dataset, depth) -> [records sorted by seed]
+    """Group records by (attn, dataset, depth, variant) then by status."""
+    # Group: (attn, dataset, depth, variant) -> [records sorted by seed]
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for r in records:
-        key = (r["attn"], r["dataset"], r["depth"])
+        key = (r["attn"], r["dataset"], r["depth"], r.get("variant", "?"))
         groups[key].append(r)
     for key in groups:
         groups[key].sort(key=lambda r: (r["seed"], r["run_dir"]))
@@ -157,10 +157,10 @@ def _emit_markdown(records: list[dict], date_prefix: str) -> str:
     # Summary table
     out.append("## Summary by config")
     out.append("")
-    out.append("| attn | dataset | depth | total | DONE | RUNNING | ABANDONED | best mean | seeds done |")
-    out.append("|---|---|---|---|---|---|---|---|---|")
+    out.append("| attn | dataset | depth | variant | total | DONE | RUN | ABND | best mean | seeds(DONE) |")
+    out.append("|---|---|---|---|---|---|---|---|---|---|")
     for key in sorted(groups):
-        attn, dataset, depth = key
+        attn, dataset, depth, variant = key
         recs = groups[key]
         n_done = sum(1 for r in recs if r["status"] == "DONE")
         n_running = sum(1 for r in recs if r["status"] == "RUNNING")
@@ -173,15 +173,18 @@ def _emit_markdown(records: list[dict], date_prefix: str) -> str:
         else:
             best_str = "-"
             seeds_str = "-"
-        out.append(f"| {attn} | {dataset} | {depth}L | {len(recs)} | {n_done} | {n_running} | {n_aban} | {best_str} | {seeds_str} |")
+        out.append(
+            f"| {attn} | {dataset} | {depth}L | {variant} | {len(recs)} | "
+            f"{n_done} | {n_running} | {n_aban} | {best_str} | {seeds_str} |"
+        )
     out.append("")
 
     # Detailed per-run
     out.append("## Detailed runs (per group)")
     out.append("")
     for key in sorted(groups):
-        attn, dataset, depth = key
-        out.append(f"### {attn} / {dataset} / {depth}L")
+        attn, dataset, depth, variant = key
+        out.append(f"### {attn} / {dataset} / {depth}L / {variant}")
         out.append("")
         out.append("| seed | run_dir | epochs | best_val | last_val | status |")
         out.append("|---|---|---|---|---|---|")
