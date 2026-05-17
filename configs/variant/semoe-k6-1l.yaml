@@ -1,0 +1,13 @@
+# SeMoE K=6 with depth=1 — 1L scaling variant of the K6 candidate for SSC/GSC.
+# Mirrors semoe-k6.yaml (extra SWA + LRA capacity) at depth=1.
+model:
+  attention: semoe
+  depth: 1                # override SSC/GSC default depth=2
+  semoe:
+    num_experts: 6
+    expert_types: [swa, lra, swa_local, identity, swa, lra]
+    small_window: 5
+    load_balance_weight: 0.01
+
+training:
+  grad_clip: 1.0
