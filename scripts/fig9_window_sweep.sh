@@ -9,7 +9,10 @@
 #   tmux new -ds fig9 'bash src/scripts/fig9_window_sweep.sh'
 
 set -eu
-cd "$(dirname "$0")/../.."   # repo root
+# Resolve repo root robustly: prefer git, fall back to script-relative.
+if root=$(git rev-parse --show-toplevel 2>/dev/null); then cd "$root"
+else cd "$(dirname "$0")/.."
+fi
 
 WINDOWS=(4 8 12 16 20 32 50)
 SEEDS=(0 1)
