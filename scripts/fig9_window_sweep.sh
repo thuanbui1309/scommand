@@ -26,11 +26,22 @@ mkdir -p "$LOG_DIR" "$TMP_CFG_DIR"
 echo "=== FIG 9 WINDOW SWEEP START $(date) ===" | tee -a "$MAIN_LOG"
 echo "windows=${WINDOWS[*]} seeds=${SEEDS[*]}" | tee -a "$MAIN_LOG"
 
+# Locate K2 base config (server has configs/ at root; local has src/configs/).
+BASE_CFG=""
+for cand in configs/variant/semoe-k2-1l.yaml src/configs/variant/semoe-k2-1l.yaml; do
+  [ -f "$cand" ] && BASE_CFG="$cand" && break
+done
+if [ -z "$BASE_CFG" ]; then
+  echo "ERROR: cannot locate semoe-k2-1l.yaml (cwd=$(pwd))" | tee -a "$MAIN_LOG"
+  exit 1
+fi
+echo "Base config: $BASE_CFG" | tee -a "$MAIN_LOG"
+
 for w in "${WINDOWS[@]}"; do
   cfg=$TMP_CFG_DIR/semoe-k2-1l-w${w}.yaml
   # Extend K2 1L base with window_radius override.
   {
-    cat src/configs/variant/semoe-k2-1l.yaml
+    cat "$BASE_CFG"
     echo ""
     echo "# Fig 9 window-sweep override"
     echo "model:"
